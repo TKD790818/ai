@@ -10,43 +10,109 @@ import twstock
 # =========================
 # Secrets
 # =========================
-TELEGRAM_TOKEN = st.secrets["TELEGRAM_TOKEN"]
-TELEGRAM_CHAT_ID = st.secrets["TELEGRAM_CHAT_ID"]
+TELEGRAM_TOKEN = st.secrets.get("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = st.secrets.get("TELEGRAM_CHAT_ID", "")
 
-st.set_page_config(page_title="AI交易面板 Mobile v13.4", layout="wide")
-st.title("📱 AI交易面板 Mobile v13.4｜台股雷達 + 手機通知")
+if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+    st.error("尚未設定 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID，請到 Streamlit Cloud 的 Secrets 設定。")
+    st.stop()
+
+st.set_page_config(page_title="AI交易面板 Mobile v13.5", layout="wide")
+st.title("📱 AI交易面板 Mobile v13.5｜台股雷達 + 手機通知")
 
 if "sent_alerts" not in st.session_state:
     st.session_state.sent_alerts = set()
 
 # =========================
-# AI 概念股池
+# 主題股票池
 # =========================
-AI_STOCK_POOL = {
-    "2330.TW": "台積電",
-    "2317.TW": "鴻海",
-    "2382.TW": "廣達",
-    "3231.TW": "緯創",
-    "6669.TW": "緯穎",
-    "3017.TW": "奇鋐",
-    "3324.TWO": "雙鴻",
-    "3661.TW": "世芯-KY",
-    "2454.TW": "聯發科",
-    "3035.TW": "智原",
-    "3443.TW": "創意",
-    "2376.TW": "技嘉",
-    "2377.TW": "微星",
-    "2356.TW": "英業達",
-    "2308.TW": "台達電",
-    "3105.TWO": "穩懋",
-    "4906.TW": "正文",
-    "6285.TW": "啟碁",
-    "8046.TW": "南電",
-    "3189.TWO": "景碩",
-    "2383.TW": "台光電",
-    "2368.TW": "金像電",
-    "6274.TWO": "台燿",
-    "6213.TW": "聯茂",
+THEME_POOLS = {
+    "AI概念股": {
+        "2330.TW": "台積電",
+        "2317.TW": "鴻海",
+        "2382.TW": "廣達",
+        "3231.TW": "緯創",
+        "6669.TW": "緯穎",
+        "3017.TW": "奇鋐",
+        "3324.TWO": "雙鴻",
+        "3661.TW": "世芯-KY",
+        "2454.TW": "聯發科",
+        "3035.TW": "智原",
+        "3443.TW": "創意",
+        "2376.TW": "技嘉",
+        "2377.TW": "微星",
+        "2356.TW": "英業達",
+        "2308.TW": "台達電",
+    },
+    "半導體": {
+        "2330.TW": "台積電",
+        "2454.TW": "聯發科",
+        "3661.TW": "世芯-KY",
+        "3443.TW": "創意",
+        "3035.TW": "智原",
+        "2379.TW": "瑞昱",
+        "2408.TW": "南亞科",
+        "2303.TW": "聯電",
+        "3105.TWO": "穩懋",
+        "6488.TWO": "環球晶",
+    },
+    "AI伺服器": {
+        "2317.TW": "鴻海",
+        "2382.TW": "廣達",
+        "3231.TW": "緯創",
+        "6669.TW": "緯穎",
+        "2356.TW": "英業達",
+        "2376.TW": "技嘉",
+        "2377.TW": "微星",
+        "3017.TW": "奇鋐",
+        "2308.TW": "台達電",
+    },
+    "散熱": {
+        "3017.TW": "奇鋐",
+        "3324.TWO": "雙鴻",
+        "3653.TW": "健策",
+        "2421.TW": "建準",
+        "6230.TWO": "尼得科超眾",
+    },
+    "PCB / CCL": {
+        "2383.TW": "台光電",
+        "2368.TW": "金像電",
+        "6274.TWO": "台燿",
+        "6213.TW": "聯茂",
+        "8046.TW": "南電",
+        "3189.TWO": "景碩",
+        "3037.TW": "欣興",
+    },
+    "光通訊 / 網通": {
+        "4906.TW": "正文",
+        "6285.TW": "啟碁",
+        "2345.TW": "智邦",
+        "3081.TWO": "聯亞",
+        "4979.TWO": "華星光",
+        "3363.TWO": "上詮",
+    },
+    "記憶體": {
+        "2408.TW": "南亞科",
+        "2344.TW": "華邦電",
+        "3260.TWO": "威剛",
+        "8299.TWO": "群聯",
+        "6239.TW": "力成",
+    },
+    "金融": {
+        "2881.TW": "富邦金",
+        "2882.TW": "國泰金",
+        "2891.TW": "中信金",
+        "2886.TW": "兆豐金",
+        "2884.TW": "玉山金",
+        "2885.TW": "元大金",
+    },
+    "航運": {
+        "2603.TW": "長榮",
+        "2609.TW": "陽明",
+        "2615.TW": "萬海",
+        "2618.TW": "長榮航",
+        "2610.TW": "華航",
+    },
 }
 
 # =========================
@@ -56,16 +122,11 @@ st.sidebar.header("掃描設定")
 
 scan_mode = st.sidebar.selectbox(
     "掃描來源",
-    ["全部台股", "AI概念股池", "自訂清單"],
-    index=1
+    ["AI概念股", "半導體", "AI伺服器", "散熱", "PCB / CCL", "光通訊 / 網通", "記憶體", "金融", "航運", "全部台股"],
+    index=0
 )
 
-scan_limit = st.sidebar.slider("掃描台股檔數", 10, 500, 50)
-
-custom_text = st.sidebar.text_area(
-    "自訂清單，一行一檔",
-    value="2330.TW\n2317.TW\n2382.TW\n3231.TW\n6669.TW\n3017.TW\n3661.TW\n3105.TWO"
-)
+scan_limit = st.sidebar.slider("全部台股掃描檔數", 10, 500, 50)
 
 refresh_sec = st.sidebar.slider("刷新秒數", 60, 1200, 180)
 auto_refresh = st.sidebar.checkbox("自動刷新", value=False)
@@ -91,7 +152,7 @@ def send_telegram(message):
         return False
 
 if st.sidebar.button("測試 Telegram 通知"):
-    ok = send_telegram("✅ AI交易面板 Mobile v13.4 測試通知成功")
+    ok = send_telegram("✅ AI交易面板 Mobile v13.5 測試通知成功")
     if ok:
         st.sidebar.success("已送出")
     else:
@@ -129,26 +190,18 @@ def get_tw_stocks(limit):
     return result
 
 def get_scan_list():
-    if scan_mode == "AI概念股池":
-        return [
-            {"名稱": f"{name} {code.replace('.TW','').replace('.TWO','')}", "代號": code, "市場": "AI概念"}
-            for code, name in AI_STOCK_POOL.items()
-        ]
+    if scan_mode == "全部台股":
+        return get_tw_stocks(scan_limit)
 
-    if scan_mode == "自訂清單":
-        result = []
-        for code in custom_text.splitlines():
-            code = code.strip()
-            if not code:
-                continue
-            result.append({
-                "名稱": code,
-                "代號": code,
-                "市場": "自訂"
-            })
-        return result
-
-    return get_tw_stocks(scan_limit)
+    pool = THEME_POOLS.get(scan_mode, {})
+    return [
+        {
+            "名稱": f"{name} {code.replace('.TW', '').replace('.TWO', '')}",
+            "代號": code,
+            "市場": scan_mode
+        }
+        for code, name in pool.items()
+    ]
 
 # =========================
 # 技術資料
@@ -190,9 +243,34 @@ def get_data(code):
     return data.dropna()
 
 # =========================
+# 建議買價
+# =========================
+def calc_buy_price(data, score, rsi_hot, weak):
+    l = data.iloc[-1]
+
+    close = l["Close"]
+    ma20 = l["MA20"]
+    low5 = data["Low"].tail(5).min()
+
+    if rsi_hot or weak:
+        return None, "不建議追價"
+
+    if score >= 80:
+        buy_price = max(ma20, close * 0.98)
+        note = "強勢股，建議等回檔靠近 MA20 或現價下方約 2%"
+    elif score >= 65:
+        buy_price = max(low5, close * 0.975)
+        note = "可觀察買點，建議等回檔確認支撐"
+    else:
+        buy_price = None
+        note = "訊號不足，暫不給建議買價"
+
+    return buy_price, note
+
+# =========================
 # 判斷邏輯
 # =========================
-def judge(data, is_ai_stock=False):
+def judge(data, is_theme_stock=False):
     l = data.iloc[-1]
     p = data.iloc[-2]
 
@@ -237,15 +315,16 @@ def judge(data, is_ai_stock=False):
     if strong_today:
         score += 10
         tags.append("今日強勢")
-    if is_ai_stock:
+    if is_theme_stock:
         score += 5
-        tags.append("AI概念股")
+        tags.append(scan_mode)
 
     score = min(score, 100)
 
     short_stop = data["Low"].tail(5).min()
     swing_stop = l["MA20"]
     defense_line = l["MA60"]
+    buy_price, buy_note = calc_buy_price(data, score, rsi_hot, weak)
 
     if rsi_hot:
         action = "🔴 建議減碼"
@@ -280,6 +359,8 @@ def judge(data, is_ai_stock=False):
         "short_stop": short_stop,
         "swing_stop": swing_stop,
         "defense_line": defense_line,
+        "buy_price": buy_price,
+        "buy_note": buy_note,
         "vol_up": vol_up,
         "rsi_hot": rsi_hot,
         "breakout20": breakout20,
@@ -318,23 +399,25 @@ progress = st.progress(0)
 for i, item in enumerate(stocks):
     name = item["名稱"]
     code = item["代號"]
-    is_ai_stock = code in AI_STOCK_POOL or scan_mode == "AI概念股池"
+    is_theme_stock = scan_mode != "全部台股"
 
     try:
         d = get_data(code)
         if d is None:
             continue
 
-        j = judge(d, is_ai_stock=is_ai_stock)
+        j = judge(d, is_theme_stock=is_theme_stock)
         l = d.iloc[-1]
         p = d.iloc[-2]
         change_pct = ((l["Close"] - p["Close"]) / p["Close"]) * 100
 
         alert_key = f"{datetime.now().date()}-{code}-{j['action']}-{j['score']}"
 
+        buy_price_text = "不建議追價" if j["buy_price"] is None else f"{j['buy_price']:.2f}"
+
         if should_alert(j) and alert_key not in st.session_state.sent_alerts:
             send_telegram(
-                f"📱 AI交易雷達通知 v13.4\n"
+                f"📱 AI交易雷達通知 v13.5\n"
                 f"股票：{name}\n"
                 f"代號：{code}\n"
                 f"收盤：{l['Close']:.2f}\n"
@@ -344,6 +427,7 @@ for i, item in enumerate(stocks):
                 f"建議：{j['action']}\n"
                 f"分類：{'、'.join(j['tags'])}\n"
                 f"原因：{j['reason']}\n"
+                f"建議買價：{buy_price_text}\n"
                 f"短線停損：{j['short_stop']:.2f}\n"
                 f"波段停損：{j['swing_stop']:.2f}\n"
                 f"防守線：{j['defense_line']:.2f}"
@@ -363,6 +447,8 @@ for i, item in enumerate(stocks):
             "創波段高": "是" if j["breakout60"] else "否",
             "建議": j["action"],
             "原因": j["reason"],
+            "建議買價": None if j["buy_price"] is None else round(j["buy_price"], 2),
+            "買價說明": j["buy_note"],
             "短線停損": round(j["short_stop"], 2),
             "波段停損": round(j["swing_stop"], 2),
             "防守線": round(j["defense_line"], 2),
@@ -382,6 +468,8 @@ for i, item in enumerate(stocks):
             "創波段高": "-",
             "建議": "讀取失敗",
             "原因": str(e),
+            "建議買價": None,
+            "買價說明": "-",
             "短線停損": None,
             "波段停損": None,
             "防守線": None,
@@ -403,7 +491,7 @@ df = df.sort_values(by=["分數", "漲跌幅%"], ascending=False).reset_index(dr
 st.subheader("🏆 今日 Top 5 雷達")
 top5 = df.head(5)
 st.dataframe(
-    top5[["名稱", "代號", "收盤", "漲跌幅%", "RSI", "分數", "分類", "建議", "短線停損", "波段停損"]],
+    top5[["名稱", "代號", "收盤", "漲跌幅%", "RSI", "分數", "分類", "建議", "建議買價", "短線停損", "波段停損"]],
     use_container_width=True
 )
 
@@ -411,7 +499,7 @@ st.dataframe(
 # 分類 Tabs
 # =========================
 strong_df = df[df["分類"].str.contains("今日強勢", na=False)]
-ai_df = df[df["分類"].str.contains("AI概念股", na=False)]
+theme_df = df[df["分類"].str.contains(scan_mode, na=False)] if scan_mode != "全部台股" else pd.DataFrame()
 volume_df = df[df["分類"].str.contains("爆量股", na=False)]
 ma20_df = df[df["分類"].str.contains("突破月線", na=False)]
 macd_df = df[df["分類"].str.contains("MACD翻正", na=False)]
@@ -422,7 +510,7 @@ risk_df = df[df["建議"].str.contains("出場|減碼", na=False)]
 
 tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "🔥 今日強勢",
-    "🤖 AI概念股",
+    "🎯 主題股",
     "💥 爆量股",
     "📈 突破月線",
     "🟢 MACD翻正",
@@ -437,7 +525,10 @@ with tab1:
     st.dataframe(strong_df, use_container_width=True)
 
 with tab2:
-    st.dataframe(ai_df, use_container_width=True)
+    if scan_mode == "全部台股":
+        st.info("目前為全部台股模式，請切換主題池查看主題股。")
+    else:
+        st.dataframe(theme_df, use_container_width=True)
 
 with tab3:
     st.dataframe(volume_df, use_container_width=True)
