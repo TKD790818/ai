@@ -721,23 +721,41 @@ def render_metric(label, value, sub=""):
 
 
 def render_heatmap(theme_summary):
-    html_parts = []
-    html_parts.append('<div class="section-title">🔥 類股熱力圖</div>')
-    html_parts.append('<div class="section-sub">先看市場大方向：哪個族群轉強、哪個族群轉弱。</div>')
-    html_parts.append('<div class="heat-grid">')
-    for item in theme_summary:
-        html_parts.append(f"""
-        <div class="heat-box {heat_class(item['熱度分數'])}">
-            <div class="heat-name">{item['類股']}</div>
-            <div class="heat-score">{item['熱度分數']}</div>
-            <div class="heat-meta">
-                {item['情緒']}<br>
-                爆量 {item['爆量數']}｜多方 {item['多方數']}｜空方 {item['空方數']}
-            </div>
-        </div>
-        """)
-    html_parts.append('</div>')
-    st.markdown("".join(html_parts), unsafe_allow_html=True)
+    st.markdown('<div class="section-title">🔥 類股熱力圖</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-sub">先看市場大方向：哪個族群轉強、哪個族群轉弱。</div>', unsafe_allow_html=True)
+
+    if not theme_summary:
+        st.info("目前沒有類股熱力資料")
+        return
+
+    # 用 Streamlit columns 取代整串 HTML grid，避免 HTML 被當文字顯示導致跑版
+    cols_per_row = 4
+    for start in range(0, len(theme_summary), cols_per_row):
+        row_items = theme_summary[start:start + cols_per_row]
+        cols = st.columns(cols_per_row)
+
+        for col, item in zip(cols, row_items):
+            css = heat_class(item["熱度分數"])
+            with col:
+                st.markdown(
+                    f"""
+                    <div class="heat-box {css}">
+                        <div class="heat-name">{item['類股']}</div>
+                        <div class="heat-score">{item['熱度分數']}</div>
+                        <div class="heat-meta">
+                            {item['情緒']}<br>
+                            爆量 {item['爆量數']}｜多方 {item['多方數']}｜空方 {item['空方數']}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # 補空欄，避免最後一排數量不足時變形
+        if len(row_items) < cols_per_row:
+            for col in cols[len(row_items):]:
+                with col:
+                    st.empty()
 
 
 def render_radar_list(title, data, mode="bull"):
