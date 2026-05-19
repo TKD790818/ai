@@ -26,155 +26,220 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
     st.error("尚未設定 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID")
     st.stop()
 
-st.set_page_config(
-    page_title="AI交易面板 Mobile v14.2",
-    layout="wide"
-)
+st.set_page_config(page_title="AI交易面板 Mobile v14.3", layout="wide")
 
 # =========================
-# UI CSS：交易駕駛艙樣式
+# Dark Cockpit CSS
 # =========================
 st.markdown(
     """
     <style>
+    html, body, [data-testid="stAppViewContainer"] {
+        background: #07111f !important;
+        color: #e5eefc !important;
+    }
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #08111f, #0b1628) !important;
+        color: #e5eefc !important;
+        border-right: 1px solid rgba(148,163,184,0.18);
+    }
+    [data-testid="stSidebar"] * {
+        color: #e5eefc !important;
+    }
+    [data-testid="stHeader"] {
+        background: rgba(7,17,31,0) !important;
+    }
     .block-container {
         padding-top: 1rem;
-        padding-left: 0.8rem;
-        padding-right: 0.8rem;
-        max-width: 1280px;
+        padding-left: 0.9rem;
+        padding-right: 0.9rem;
+        max-width: 1380px;
+    }
+    .app-shell {
+        color: #e5eefc;
     }
     .main-title {
         font-size: 30px;
         font-weight: 950;
         letter-spacing: -0.5px;
         margin-bottom: 2px;
+        color: #f8fafc;
     }
     .sub-title {
-        color: #64748b;
-        font-size: 14px;
-        margin-bottom: 14px;
+        color: #8aa4c7;
+        font-size: 13px;
+        margin-bottom: 12px;
+    }
+    .top-status {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: rgba(34,197,94,0.12);
+        border: 1px solid rgba(34,197,94,0.24);
+        color: #86efac;
+        font-size: 13px;
+        font-weight: 800;
+        margin-bottom: 8px;
     }
     .cockpit-line {
         height: 4px;
         border-radius: 999px;
         background: linear-gradient(90deg, #38bdf8, #6366f1, #22c55e);
         margin: 8px 0 16px 0;
+        box-shadow: 0 0 20px rgba(56,189,248,0.35);
     }
     .metric-card {
-        padding: 16px;
-        border-radius: 20px;
+        padding: 18px;
+        border-radius: 18px;
         color: white;
-        border: 1px solid rgba(148, 163, 184, 0.20);
-        background: radial-gradient(circle at top left, rgba(56, 189, 248, 0.22), rgba(15, 23, 42, 0.98));
-        box-shadow: 0 8px 26px rgba(15, 23, 42, 0.18);
-        min-height: 108px;
+        border: 1px solid rgba(148,163,184,0.18);
+        background: radial-gradient(circle at top right, rgba(59,130,246,0.28), rgba(15,23,42,0.98) 48%, rgba(2,6,23,0.98));
+        box-shadow: 0 12px 32px rgba(0,0,0,0.34);
+        min-height: 120px;
     }
-    .metric-label {
-        font-size: 13px;
-        color: #cbd5e1;
-        margin-bottom: 6px;
-    }
-    .metric-value {
-        font-size: 27px;
-        font-weight: 950;
-        line-height: 1.1;
-    }
-    .metric-sub {
-        font-size: 12px;
-        color: #94a3b8;
-        margin-top: 6px;
-    }
+    .metric-label { font-size: 13px; color: #9fb7d9; margin-bottom: 8px; }
+    .metric-value { font-size: 28px; font-weight: 950; line-height: 1.15; color: #f8fafc; }
+    .metric-sub { font-size: 12px; color: #93a8c4; margin-top: 8px; }
     .section-title {
         font-size: 22px;
         font-weight: 950;
-        margin-top: 18px;
+        margin-top: 20px;
         margin-bottom: 4px;
+        color: #f8fafc;
     }
-    .section-sub {
-        color: #64748b;
-        font-size: 13px;
-        margin-bottom: 10px;
-    }
+    .section-sub { color: #8aa4c7; font-size: 13px; margin-bottom: 10px; }
     .heat-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
         gap: 12px;
         margin-bottom: 18px;
     }
     .heat-box {
-        padding: 15px;
-        border-radius: 20px;
+        position: relative;
+        overflow: hidden;
+        padding: 18px;
+        border-radius: 18px;
         color: white;
-        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.16);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.32);
         border: 1px solid rgba(255,255,255,0.14);
+        min-height: 132px;
     }
-    .heat-name { font-size: 15px; font-weight: 900; }
-    .heat-score { font-size: 32px; font-weight: 950; margin-top: 7px; }
-    .heat-meta { font-size: 12px; color: rgba(255,255,255,0.82); margin-top: 7px; line-height: 1.45; }
-    .heat-green { background: linear-gradient(135deg, #10b981, #065f46); }
-    .heat-lime { background: linear-gradient(135deg, #65a30d, #3f6212); }
-    .heat-gray { background: linear-gradient(135deg, #475569, #0f172a); }
-    .heat-orange { background: linear-gradient(135deg, #f97316, #7c2d12); }
-    .heat-red { background: linear-gradient(135deg, #ef4444, #7f1d1d); }
+    .heat-box:after {
+        content: "";
+        position: absolute;
+        right: -28px;
+        bottom: -28px;
+        width: 92px;
+        height: 92px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.10);
+    }
+    .heat-name { font-size: 16px; font-weight: 950; position: relative; z-index: 2; }
+    .heat-score { font-size: 34px; font-weight: 950; margin-top: 10px; position: relative; z-index: 2; }
+    .heat-meta { font-size: 12px; color: rgba(255,255,255,0.84); margin-top: 8px; line-height: 1.5; position: relative; z-index: 2; }
+    .heat-green { background: linear-gradient(135deg, #16a34a, #064e3b); }
+    .heat-lime { background: linear-gradient(135deg, #4d7c0f, #1f3d0d); }
+    .heat-gray { background: linear-gradient(135deg, #334155, #0f172a); }
+    .heat-orange { background: linear-gradient(135deg, #c2410c, #431407); }
+    .heat-red { background: linear-gradient(135deg, #b91c1c, #450a0a); }
+    .radar-panel {
+        border-radius: 20px;
+        border: 1px solid rgba(148,163,184,0.18);
+        background: rgba(15,23,42,0.76);
+        box-shadow: 0 14px 32px rgba(0,0,0,0.30);
+        padding: 14px;
+        margin-bottom: 14px;
+    }
     .radar-row {
         display: grid;
-        grid-template-columns: 44px minmax(140px, 1.4fr) 0.8fr 0.9fr 0.9fr 1.2fr;
-        gap: 8px;
+        grid-template-columns: 42px minmax(145px, 1.4fr) 0.75fr 0.75fr 0.8fr 1.25fr;
+        gap: 10px;
         align-items: center;
-        padding: 12px 14px;
-        border-radius: 18px;
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        background: rgba(248, 250, 252, 0.82);
+        padding: 12px;
+        border-radius: 16px;
+        border: 1px solid rgba(148,163,184,0.12);
+        background: rgba(2,6,23,0.68);
         margin-bottom: 8px;
     }
     .rank-badge {
-        width: 34px;
-        height: 34px;
-        border-radius: 14px;
-        background: #0f172a;
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 900;
+        width: 34px; height: 34px; border-radius: 13px;
+        background: linear-gradient(135deg, #0f172a, #1e3a8a);
+        color: white; display: flex; align-items: center; justify-content: center;
+        font-weight: 950;
     }
-    .stock-name { font-weight: 900; font-size: 15px; color: #0f172a; }
-    .stock-code { font-size: 12px; color: #64748b; margin-top: 2px; }
-    .mini-label { font-size: 11px; color: #64748b; }
-    .mini-value { font-size: 14px; font-weight: 900; color: #0f172a; margin-top: 1px; }
+    .stock-name { font-weight: 950; font-size: 15px; color: #f8fafc; }
+    .stock-code { font-size: 12px; color: #7f96b6; margin-top: 2px; }
+    .mini-label { font-size: 11px; color: #7f96b6; }
+    .mini-value { font-size: 14px; font-weight: 950; color: #f8fafc; margin-top: 2px; }
     .pill {
         display: inline-block;
         padding: 5px 9px;
         border-radius: 999px;
         font-size: 12px;
-        font-weight: 800;
+        font-weight: 900;
         white-space: nowrap;
+        margin-bottom: 4px;
     }
-    .pill-green { background: rgba(16, 185, 129, 0.13); color: #047857; }
-    .pill-yellow { background: rgba(245, 158, 11, 0.14); color: #92400e; }
-    .pill-red { background: rgba(239, 68, 68, 0.14); color: #b91c1c; }
-    .pill-gray { background: rgba(100, 116, 139, 0.14); color: #475569; }
+    .pill-green { background: rgba(34,197,94,0.16); color: #86efac; border: 1px solid rgba(34,197,94,0.28); }
+    .pill-yellow { background: rgba(245,158,11,0.16); color: #fcd34d; border: 1px solid rgba(245,158,11,0.28); }
+    .pill-red { background: rgba(239,68,68,0.16); color: #fca5a5; border: 1px solid rgba(239,68,68,0.28); }
+    .pill-gray { background: rgba(148,163,184,0.13); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.20); }
     .detail-box {
-        padding: 16px;
+        padding: 18px;
         border-radius: 20px;
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        background: #f8fafc;
+        border: 1px solid rgba(56,189,248,0.20);
+        background: linear-gradient(135deg, rgba(15,23,42,0.92), rgba(2,6,23,0.92));
+        box-shadow: 0 14px 34px rgba(0,0,0,0.28);
+        margin-bottom: 14px;
+        color: #e5eefc;
+    }
+    .detail-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
         margin-bottom: 12px;
     }
+    .detail-title { font-size: 22px; font-weight: 950; color: #f8fafc; }
+    .detail-sub { color: #8aa4c7; font-size: 13px; margin-top: 2px; }
+    .detail-price { font-size: 28px; font-weight: 950; color: #86efac; text-align: right; }
+    .detail-change-pos { color: #86efac; font-size: 13px; text-align: right; }
+    .detail-change-neg { color: #fca5a5; font-size: 13px; text-align: right; }
+    .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+    }
+    .detail-cell {
+        padding: 12px;
+        border-radius: 15px;
+        background: rgba(15,23,42,0.85);
+        border: 1px solid rgba(148,163,184,0.15);
+    }
+    .detail-cell-label { font-size: 12px; color: #8aa4c7; }
+    .detail-cell-value { font-size: 18px; color: #f8fafc; font-weight: 950; margin-top: 4px; }
+    .condition-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+    .condition-box { padding: 12px; border-radius: 15px; background: rgba(2,6,23,0.62); border: 1px solid rgba(148,163,184,0.12); }
+    .condition-title { font-size: 13px; font-weight: 950; color: #f8fafc; margin-bottom: 6px; }
+    .condition-text { font-size: 13px; color: #cbd5e1; line-height: 1.5; }
+    .stDataFrame { background: rgba(15,23,42,0.08); border-radius: 14px; }
     @media (max-width: 760px) {
-        .radar-row {
-            grid-template-columns: 38px 1fr 0.75fr;
-            gap: 8px;
-        }
+        .radar-row { grid-template-columns: 38px 1fr 0.75fr; }
         .hide-mobile { display: none; }
         .metric-value { font-size: 23px; }
+        .condition-grid { grid-template-columns: 1fr; }
     }
     </style>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
-st.markdown('<div class="main-title">📱 AI交易面板 Mobile v14.2</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-shell">', unsafe_allow_html=True)
+st.markdown('<div class="top-status">● 盤中交易雷達</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">AI交易面板 Mobile v14.3 🚀</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">交易駕駛艙｜Shioaji 即時行情｜類股熱力圖｜主力雷達｜空方警戒</div>', unsafe_allow_html=True)
 st.markdown('<div class="cockpit-line"></div>', unsafe_allow_html=True)
 
@@ -185,6 +250,10 @@ if "sent_alerts" not in st.session_state:
 # 主題股票池
 # =========================
 THEME_POOLS = {
+    "AI伺服器": {
+        "2317.TW": "鴻海", "2382.TW": "廣達", "3231.TW": "緯創", "6669.TW": "緯穎", "2356.TW": "英業達",
+        "2376.TW": "技嘉", "2377.TW": "微星",
+    },
     "AI概念股": {
         "2330.TW": "台積電", "2317.TW": "鴻海", "2382.TW": "廣達", "3231.TW": "緯創", "6669.TW": "緯穎",
         "3017.TW": "奇鋐", "3324.TWO": "雙鴻", "3661.TW": "世芯-KY", "2454.TW": "聯發科", "3035.TW": "智原",
@@ -193,10 +262,6 @@ THEME_POOLS = {
     "半導體": {
         "2330.TW": "台積電", "2454.TW": "聯發科", "3661.TW": "世芯-KY", "3443.TW": "創意", "3035.TW": "智原",
         "2379.TW": "瑞昱", "2408.TW": "南亞科", "2303.TW": "聯電", "3105.TWO": "穩懋",
-    },
-    "AI伺服器": {
-        "2317.TW": "鴻海", "2382.TW": "廣達", "3231.TW": "緯創", "6669.TW": "緯穎", "2356.TW": "英業達",
-        "2376.TW": "技嘉", "2377.TW": "微星",
     },
     "散熱": {
         "3017.TW": "奇鋐", "3324.TWO": "雙鴻", "3653.TW": "健策", "2421.TW": "建準",
@@ -216,6 +281,9 @@ THEME_POOLS = {
     "航運": {
         "2603.TW": "長榮", "2609.TW": "陽明", "2615.TW": "萬海", "2618.TW": "長榮航",
     },
+    "生技醫療": {
+        "6446.TW": "藥華藥", "4743.TWO": "合一", "4123.TWO": "晟德", "6547.TWO": "高端疫苗",
+    },
 }
 
 # =========================
@@ -228,7 +296,7 @@ st.sidebar.write("Telegram：", "✅ 已設定" if TELEGRAM_TOKEN and TELEGRAM_C
 st.sidebar.header("掃描設定")
 scan_mode = st.sidebar.selectbox(
     "掃描來源",
-    ["全部主題熱力圖", "AI概念股", "半導體", "AI伺服器", "散熱", "PCB / CCL", "光通訊 / 網通", "記憶體", "金融", "航運", "全部台股"],
+    ["全部主題熱力圖"] + list(THEME_POOLS.keys()) + ["全部台股"],
     index=0,
 )
 scan_limit = st.sidebar.slider("全部台股掃描檔數", 10, 500, 50)
@@ -327,7 +395,6 @@ def get_tw_stocks(limit):
 def get_scan_list():
     if scan_mode == "全部台股":
         return get_tw_stocks(scan_limit)
-
     if scan_mode == "全部主題熱力圖":
         merged = {}
         code_to_groups = {}
@@ -335,11 +402,7 @@ def get_scan_list():
             for code, name in pool.items():
                 merged[code] = name
                 code_to_groups.setdefault(code, []).append(group)
-        return [
-            {"名稱": f"{name} {code}", "代號": code, "市場": "、".join(code_to_groups.get(code, []))}
-            for code, name in merged.items()
-        ]
-
+        return [{"名稱": f"{name} {code}", "代號": code, "市場": "、".join(code_to_groups.get(code, []))} for code, name in merged.items()]
     pool = THEME_POOLS.get(scan_mode, {})
     return [{"名稱": f"{name} {code}", "代號": code, "市場": scan_mode} for code, name in pool.items()]
 
@@ -355,7 +418,6 @@ def get_data(code):
     data = data.apply(pd.to_numeric, errors="coerce").dropna()
     if len(data) < 90:
         return None
-
     data["MA5"] = data["Close"].rolling(5).mean()
     data["MA20"] = data["Close"].rolling(20).mean()
     data["MA60"] = data["Close"].rolling(60).mean()
@@ -364,13 +426,11 @@ def get_data(code):
     data["HIGH60"] = data["High"].rolling(60).max()
     data["LOW20"] = data["Low"].rolling(20).min()
     data["LOW60"] = data["Low"].rolling(60).min()
-
     delta = data["Close"].diff()
     gain = delta.clip(lower=0).rolling(14).mean()
     loss = (-delta.clip(upper=0)).rolling(14).mean()
     rs = gain / loss
     data["RSI"] = 100 - (100 / (1 + rs))
-
     ema12 = data["Close"].ewm(span=12, adjust=False).mean()
     ema26 = data["Close"].ewm(span=26, adjust=False).mean()
     data["MACD"] = ema12 - ema26
@@ -388,16 +448,11 @@ def get_shioaji_snapshot(yf_code):
         if not snapshots:
             return None
         s = snapshots[0]
-        close = getattr(s, "close", None)
-        total_volume = getattr(s, "total_volume", None)
-        volume = getattr(s, "volume", None)
-        change_rate = getattr(s, "change_rate", None)
-        amount = getattr(s, "total_amount", None)
         return {
-            "即時價": close,
-            "即時量": total_volume if total_volume is not None else volume,
-            "即時漲跌幅%": change_rate,
-            "成交值": amount,
+            "即時價": getattr(s, "close", None),
+            "即時量": getattr(s, "total_volume", None) if getattr(s, "total_volume", None) is not None else getattr(s, "volume", None),
+            "即時漲跌幅%": getattr(s, "change_rate", None),
+            "成交值": getattr(s, "total_amount", None),
         }
     except Exception:
         return None
@@ -421,7 +476,7 @@ def calc_buy_price(data, score, rsi_hot, weak):
         return None
     if score >= 80:
         return max(ma20, close * 0.98)
-    elif score >= 65:
+    if score >= 65:
         return max(low5, close * 0.975)
     return None
 
@@ -440,7 +495,6 @@ def judge(data, is_theme_stock=False):
     rsi_hot = l["RSI"] > 82
     weak = l["Close"] < l["MA20"]
     strong_today = ((l["Close"] - p["Close"]) / p["Close"]) * 100 >= 3
-
     score = 0
     tags = []
     if trend_up:
@@ -470,15 +524,11 @@ def judge(data, is_theme_stock=False):
         tags.append("今日強勢")
     if is_theme_stock:
         score += 5
-        if scan_mode not in ["全部主題熱力圖", "全部台股"]:
-            tags.append(scan_mode)
-
     score = min(score, 100)
     short_stop = data["Low"].tail(5).min()
     swing_stop = l["MA20"]
     defense_line = l["MA60"]
     buy_price = calc_buy_price(data, score, rsi_hot, weak)
-
     if rsi_hot:
         action = "🔴 建議減碼"
         reason = "RSI 過熱"
@@ -500,10 +550,8 @@ def judge(data, is_theme_stock=False):
     else:
         action = "⏸ 觀望"
         reason = "無明確訊號"
-
     if not tags:
         tags.append("一般觀察")
-
     return {
         "action": action,
         "reason": reason,
@@ -533,7 +581,6 @@ def judge_bear(data):
     rsi_weak = l["RSI"] < 45
     break_low20 = l["Close"] <= p["LOW20"]
     break_low60 = l["Close"] <= p["LOW60"]
-
     bear_score = 0
     bear_tags = []
     if break_ma20:
@@ -565,7 +612,6 @@ def judge_bear(data):
     if break_low60:
         bear_score += 25
         bear_tags.append("跌破60日低")
-
     bear_score = min(bear_score, 100)
     if bear_score >= 80:
         bear_action = "📉 高度空方警戒"
@@ -581,13 +627,7 @@ def judge_bear(data):
         bear_reason = "尚未出現明顯空方警訊"
     if not bear_tags:
         bear_tags.append("空方風險低")
-    return {
-        "bear_score": bear_score,
-        "bear_action": bear_action,
-        "bear_reason": bear_reason,
-        "bear_tags": bear_tags,
-        "volume_ratio": volume_ratio,
-    }
+    return {"bear_score": bear_score, "bear_action": bear_action, "bear_reason": bear_reason, "bear_tags": bear_tags, "volume_ratio": volume_ratio}
 
 
 def judge_major_force(change_pct, bull_score, bear_score, intraday_ratio, turnover, action, bear_action):
@@ -615,9 +655,7 @@ def should_alert(judgement):
         return False
     if avoid_hot_rsi and judgement["rsi_hot"]:
         return False
-    if "強買點" in judgement["action"] or "可觀察買點" in judgement["action"]:
-        return True
-    return False
+    return "強買點" in judgement["action"] or "可觀察買點" in judgement["action"]
 
 
 def should_bear_alert(bear_judgement):
@@ -625,9 +663,7 @@ def should_bear_alert(bear_judgement):
         return False
     if bear_judgement["bear_score"] < bear_alert_score:
         return False
-    if "空方警戒" in bear_judgement["bear_action"]:
-        return True
-    return False
+    return "空方警戒" in bear_judgement["bear_action"]
 
 
 def market_sentiment(df):
@@ -664,34 +700,33 @@ def heat_class(score):
 
 
 def pill_class(text):
-    if any(k in str(text) for k in ["強買", "買盤", "多頭"]):
+    text = str(text)
+    if any(k in text for k in ["強買", "買盤", "多頭"]):
         return "pill pill-green"
-    if any(k in str(text) for k in ["空方", "賣壓", "出場", "減碼"]):
+    if any(k in text for k in ["空方", "賣壓", "出場", "減碼"]):
         return "pill pill-red"
-    if any(k in str(text) for k in ["觀察", "爆量"]):
+    if any(k in text for k in ["觀察", "爆量"]):
         return "pill pill-yellow"
     return "pill pill-gray"
 
 
 def render_metric(label, value, sub=""):
-    st.markdown(
-        f"""
-        <div class="metric-card">
-            <div class="metric-label">{label}</div>
-            <div class="metric-value">{value}</div>
-            <div class="metric-sub">{sub}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.markdown(f"""
+    <div class="metric-card">
+        <div class="metric-label">{label}</div>
+        <div class="metric-value">{value}</div>
+        <div class="metric-sub">{sub}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 def render_heatmap(theme_summary):
-    html = '<div class="section-title">🔥 類股熱力圖</div>'
-    html += '<div class="section-sub">先看市場大方向：哪個族群轉強、哪個族群轉弱。</div>'
-    html += '<div class="heat-grid">'
+    html_parts = []
+    html_parts.append('<div class="section-title">🔥 類股熱力圖</div>')
+    html_parts.append('<div class="section-sub">先看市場大方向：哪個族群轉強、哪個族群轉弱。</div>')
+    html_parts.append('<div class="heat-grid">')
     for item in theme_summary:
-        html += f"""
+        html_parts.append(f"""
         <div class="heat-box {heat_class(item['熱度分數'])}">
             <div class="heat-name">{item['類股']}</div>
             <div class="heat-score">{item['熱度分數']}</div>
@@ -700,17 +735,18 @@ def render_heatmap(theme_summary):
                 爆量 {item['爆量數']}｜多方 {item['多方數']}｜空方 {item['空方數']}
             </div>
         </div>
-        """
-    html += '</div>'
-    st.markdown(html, unsafe_allow_html=True)
+        """)
+    html_parts.append('</div>')
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 
 
 def render_radar_list(title, data, mode="bull"):
     st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="radar-panel">', unsafe_allow_html=True)
     if data.empty:
         st.info("目前沒有符合條件的資料")
+        st.markdown('</div>', unsafe_allow_html=True)
         return
-
     for idx, (_, row) in enumerate(data.head(8).iterrows(), start=1):
         price = row.get("即時價") if pd.notna(row.get("即時價")) else row.get("收盤")
         change = row.get("漲跌幅%") if pd.notna(row.get("漲跌幅%")) else 0
@@ -718,7 +754,7 @@ def render_radar_list(title, data, mode="bull"):
         action = row.get("建議") if mode == "bull" else row.get("空方警戒")
         force = row.get("主力雷達", "一般")
         intraday = row.get("盤中量比", 0)
-        html = f"""
+        st.markdown(f"""
         <div class="radar-row">
             <div class="rank-badge">{idx}</div>
             <div>
@@ -739,11 +775,50 @@ def render_radar_list(title, data, mode="bull"):
             </div>
             <div>
                 <span class="{pill_class(action)}">{action}</span><br>
-                <span class="{pill_class(force)}" style="margin-top:5px;">{force}</span>
+                <span class="{pill_class(force)}">{force}</span>
             </div>
         </div>
-        """
-        st.markdown(html, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def render_detail(selected):
+    price = selected["即時價"] if pd.notna(selected["即時價"]) else selected["收盤"]
+    change_class = "detail-change-pos" if selected["漲跌幅%"] >= 0 else "detail-change-neg"
+    buy_price = selected["建議買價"] if pd.notna(selected["建議買價"]) else "不建議追價"
+    st.markdown(f"""
+    <div class="detail-box">
+        <div class="detail-head">
+            <div>
+                <div class="detail-title">{selected['名稱']}</div>
+                <div class="detail-sub">{selected['代號']}｜{selected['類股']}</div>
+            </div>
+            <div>
+                <div class="detail-price">{price}</div>
+                <div class="{change_class}">{selected['漲跌幅%']}%</div>
+            </div>
+        </div>
+        <div>
+            <span class="{pill_class(selected['建議'])}">{selected['建議']}</span>
+            <span class="{pill_class(selected['空方警戒'])}">{selected['空方警戒']}</span>
+            <span class="{pill_class(selected['主力雷達'])}">{selected['主力雷達']}</span>
+        </div>
+        <div class="detail-grid">
+            <div class="detail-cell"><div class="detail-cell-label">多方分數</div><div class="detail-cell-value">{selected['多方分數']}</div></div>
+            <div class="detail-cell"><div class="detail-cell-label">空方分數</div><div class="detail-cell-value">{selected['空方分數']}</div></div>
+            <div class="detail-cell"><div class="detail-cell-label">盤中量比</div><div class="detail-cell-value">{selected['盤中量比']}</div></div>
+            <div class="detail-cell"><div class="detail-cell-label">RSI</div><div class="detail-cell-value">{selected['RSI']}</div></div>
+            <div class="detail-cell"><div class="detail-cell-label">建議買價</div><div class="detail-cell-value">{buy_price}</div></div>
+            <div class="detail-cell"><div class="detail-cell-label">短線停損</div><div class="detail-cell-value">{selected['短線停損']}</div></div>
+            <div class="detail-cell"><div class="detail-cell-label">波段停損</div><div class="detail-cell-value">{selected['波段停損']}</div></div>
+            <div class="detail-cell"><div class="detail-cell-label">防守線</div><div class="detail-cell-value">{selected['防守線']}</div></div>
+        </div>
+        <div class="condition-grid">
+            <div class="condition-box"><div class="condition-title">多方條件</div><div class="condition-text">{selected['分類']}<br>原因：{selected['原因']}</div></div>
+            <div class="condition-box"><div class="condition-title">空方條件</div><div class="condition-text">{selected['空方條件']}<br>原因：{selected['空方原因']}</div></div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # =========================
 # 掃描主流程
@@ -758,7 +833,6 @@ for i, item in enumerate(stocks):
     code = item["代號"]
     market_group = item.get("市場", scan_mode)
     is_theme_stock = scan_mode not in ["全部主題熱力圖", "全部台股"]
-
     try:
         d = get_data(code)
         if d is None:
@@ -769,63 +843,42 @@ for i, item in enumerate(stocks):
         l = d.iloc[-1]
         p = d.iloc[-2]
         daily_change_pct = ((l["Close"] - p["Close"]) / p["Close"]) * 100
-
         realtime_price = realtime_volume = realtime_change_pct = turnover = None
         if snap:
             realtime_price = snap.get("即時價")
             realtime_volume = snap.get("即時量")
             realtime_change_pct = snap.get("即時漲跌幅%")
             turnover = snap.get("成交值")
-
         display_price = realtime_price if realtime_price else l["Close"]
         display_change = realtime_change_pct if realtime_change_pct is not None else daily_change_pct
         intraday_ratio = calc_intraday_volume_ratio(realtime_volume, l["VOL20"])
         major_force = judge_major_force(display_change, j["score"], b["bear_score"], intraday_ratio, turnover, j["action"], b["bear_action"])
-
         bull_alert_key = f"{datetime.now(TW_TZ).date()}-BULL-{code}-{j['action']}-{j['score']}"
         bear_alert_key = f"{datetime.now(TW_TZ).date()}-BEAR-{code}-{b['bear_action']}-{b['bear_score']}"
-
         if should_alert(j) and bull_alert_key not in st.session_state.sent_alerts:
             buy_price_text = "不建議追價" if j["buy_price"] is None else f"{j['buy_price']:.2f}"
             send_telegram(
-                f"📱 AI交易雷達 v14.2\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
+                f"📱 AI交易雷達 v14.3\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
                 f"盤中量比：{intraday_ratio:.2f}\n主力雷達：{major_force}\n多方分數：{j['score']}\n建議：{j['action']}\n"
                 f"建議買價：{buy_price_text}\n短線停損：{j['short_stop']:.2f}\n波段停損：{j['swing_stop']:.2f}"
             )
             st.session_state.sent_alerts.add(bull_alert_key)
-
         if should_bear_alert(b) and bear_alert_key not in st.session_state.sent_alerts:
             send_telegram(
-                f"📉 空方警戒雷達 v14.2\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
+                f"📉 空方警戒雷達 v14.3\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
                 f"盤中量比：{intraday_ratio:.2f}\n主力雷達：{major_force}\n空方分數：{b['bear_score']}\n警戒：{b['bear_action']}\n"
                 f"條件：{'、'.join(b['bear_tags'])}"
             )
             st.session_state.sent_alerts.add(bear_alert_key)
-
         results.append({
-            "類股": market_group,
-            "名稱": name,
-            "代號": code,
+            "類股": market_group, "名稱": name, "代號": code,
             "即時價": None if realtime_price is None else round(realtime_price, 2),
-            "收盤": round(l["Close"], 2),
-            "漲跌幅%": round(display_change, 2),
-            "即時量": realtime_volume,
-            "成交值": turnover,
-            "盤中量比": round(intraday_ratio, 2),
-            "主力雷達": major_force,
-            "RSI": round(l["RSI"], 2),
-            "多方分數": j["score"],
-            "空方分數": b["bear_score"],
-            "分類": "、".join(j["tags"]),
-            "空方條件": "、".join(b["bear_tags"]),
-            "建議": j["action"],
-            "空方警戒": b["bear_action"],
-            "原因": j["reason"],
-            "空方原因": b["bear_reason"],
-            "建議買價": None if j["buy_price"] is None else round(j["buy_price"], 2),
-            "短線停損": round(j["short_stop"], 2),
-            "波段停損": round(j["swing_stop"], 2),
-            "防守線": round(j["defense_line"], 2),
+            "收盤": round(l["Close"], 2), "漲跌幅%": round(display_change, 2),
+            "即時量": realtime_volume, "成交值": turnover, "盤中量比": round(intraday_ratio, 2),
+            "主力雷達": major_force, "RSI": round(l["RSI"], 2), "多方分數": j["score"], "空方分數": b["bear_score"],
+            "分類": "、".join(j["tags"]), "空方條件": "、".join(b["bear_tags"]), "建議": j["action"], "空方警戒": b["bear_action"],
+            "原因": j["reason"], "空方原因": b["bear_reason"], "建議買價": None if j["buy_price"] is None else round(j["buy_price"], 2),
+            "短線停損": round(j["short_stop"], 2), "波段停損": round(j["swing_stop"], 2), "防守線": round(j["defense_line"], 2),
             "量比": round(b["volume_ratio"], 2),
         })
     except Exception as e:
@@ -836,11 +889,10 @@ for i, item in enumerate(stocks):
             "空方警戒": "-", "原因": str(e), "空方原因": "-", "建議買價": None, "短線停損": None,
             "波段停損": None, "防守線": None, "量比": None,
         })
-
     progress.progress((i + 1) / len(stocks))
 
 # =========================
-# 整理資料與呈現
+# 呈現
 # =========================
 df = pd.DataFrame(results)
 if df.empty:
@@ -860,7 +912,7 @@ with c3:
 with c4:
     render_metric("空方警戒", int((df["空方分數"] >= 60).sum()), "空方分數 ≥ 60")
 
-# 多類股熱力圖：依 THEME_POOLS 的族群重算，讓主畫面有真正多格熱力圖
+# 多類股熱力圖
 theme_summary = []
 for group_name, pool in THEME_POOLS.items():
     codes = set(pool.keys())
@@ -887,31 +939,17 @@ for group_name, pool in THEME_POOLS.items():
 theme_summary = sorted(theme_summary, key=lambda x: x["熱度分數"], reverse=True)
 render_heatmap(theme_summary)
 
-# 雷達列表主視覺
-render_radar_list("🏆 多方雷達排行", df.sort_values(by=["多方分數", "盤中量比"], ascending=False), mode="bull")
-render_radar_list("📉 空方警戒排行", df.sort_values(by=["空方分數", "盤中量比"], ascending=False), mode="bear")
+# 雷達列表
+render_radar_list("🚀 今日多方 Top 8", df.sort_values(by=["多方分數", "盤中量比"], ascending=False), mode="bull")
+render_radar_list("📉 空方警戒 Top 8", df.sort_values(by=["空方分數", "盤中量比"], ascending=False), mode="bear")
 
-# 點進詳細資料：用選單展開，不破壞 Streamlit 穩定性
-st.markdown('<div class="section-title">🔎 單檔詳細數據</div>', unsafe_allow_html=True)
+# 單檔詳細資料
+st.markdown('<div class="section-title">🔎 單檔詳細資訊</div>', unsafe_allow_html=True)
 selected_code = st.selectbox("選擇股票查看詳細資料", df["代號"].tolist(), format_func=lambda x: df[df["代號"] == x].iloc[0]["名稱"])
 selected = df[df["代號"] == selected_code].iloc[0]
+render_detail(selected)
 
-st.markdown(
-    f"""
-    <div class="detail-box">
-        <b>{selected['名稱']}｜{selected['代號']}</b><br>
-        即時價：{selected['即時價']}｜漲跌幅：{selected['漲跌幅%']}%｜盤中量比：{selected['盤中量比']}｜主力雷達：{selected['主力雷達']}<br>
-        多方分數：{selected['多方分數']}｜空方分數：{selected['空方分數']}｜RSI：{selected['RSI']}<br>
-        建議：{selected['建議']}｜空方警戒：{selected['空方警戒']}<br>
-        建議買價：{selected['建議買價']}｜短線停損：{selected['短線停損']}｜波段停損：{selected['波段停損']}｜防守線：{selected['防守線']}<br>
-        多方條件：{selected['分類']}<br>
-        空方條件：{selected['空方條件']}
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-# 完整表格保留在下方
+# 完整表格 Tabs
 strong_df = df[df["分類"].str.contains("今日強勢", na=False)]
 volume_df = df[df["盤中量比"] >= intraday_hot_ratio].sort_values(by="盤中量比", ascending=False)
 major_df = df[df["主力雷達"].str.contains("主力|買盤|賣壓|爆量", na=False)]
@@ -942,6 +980,7 @@ with tab9:
     st.dataframe(df, use_container_width=True)
 
 st.caption(f"最後更新：{datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')}｜台灣時間｜Shioaji 即時行情")
+st.markdown('</div>', unsafe_allow_html=True)
 
 if auto_refresh:
     time.sleep(refresh_sec)
