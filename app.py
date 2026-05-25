@@ -26,7 +26,7 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
     st.error("尚未設定 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID")
     st.stop()
 
-st.set_page_config(page_title="AI交易面板 Mobile v14.6", layout="wide")
+st.set_page_config(page_title="AI交易面板 Mobile v14.7", layout="wide")
 
 # =========================
 # Dark Cockpit CSS
@@ -220,6 +220,9 @@ st.markdown(
     .condition-title { font-size: 13px; font-weight: 950; color: #f8fafc; margin-bottom: 6px; }
     .condition-text { font-size: 13px; color: #cbd5e1; line-height: 1.5; }
     .stDataFrame { background: rgba(15,23,42,0.08); border-radius: 14px; }
+    .sidebar-divider { border-top: 1px solid rgba(148,163,184,0.2); margin: 12px 0; }
+    .sidebar-section-title { font-size: 12px; font-weight: 950; color: #8aa4c7; margin: 10px 0 6px 0; }
+    .sidebar-option { font-size: 14px; margin: 4px 0; }
     @media (max-width: 760px) {
         .radar-row { grid-template-columns: 38px 1fr 0.75fr; }
         .hide-mobile { display: none; }
@@ -233,7 +236,7 @@ st.markdown(
 
 st.markdown('<div class="app-shell">', unsafe_allow_html=True)
 st.markdown('<div class="top-status">● 盤中交易雷達</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-title">AI交易面板 Mobile v14.6 🚀</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">AI交易面板 Mobile v14.7 🚀</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">交易駕駛艙｜快速掃描｜類股熱力圖｜主力雷達｜空方警戒</div>', unsafe_allow_html=True)
 st.markdown('<div class="cockpit-line"></div>', unsafe_allow_html=True)
 
@@ -241,72 +244,119 @@ if "sent_alerts" not in st.session_state:
     st.session_state.sent_alerts = set()
 
 # =========================
-# 主題股票池
+# 擴充主題股票池（150+ 檔）
 # =========================
 THEME_POOLS = {
-    "AI伺服器": {
+    "🤖 AI伺服器": {
         "2317.TW": "鴻海", "2382.TW": "廣達", "3231.TW": "緯創", "6669.TW": "緯穎", "2356.TW": "英業達",
-        "2376.TW": "技嘉", "2377.TW": "微星",
+        "2376.TW": "技嘉", "2377.TW": "微星", "2471.TW": "冠德", "2412.TW": "中華電",
+        "3673.TW": "研晶", "5430.TWO": "南茂", "2436.TW": "偉詮電子", "3541.TW": "西磊",
     },
-    "AI概念股": {
+    "🔧 AI概念股": {
         "2330.TW": "台積電", "2317.TW": "鴻海", "2382.TW": "廣達", "3231.TW": "緯創", "6669.TW": "緯穎",
         "3017.TW": "奇鋐", "3324.TWO": "雙鴻", "3661.TW": "世芯-KY", "2454.TW": "聯發科", "3035.TW": "智原",
         "3443.TW": "創意", "2376.TW": "技嘉", "2377.TW": "微星", "2356.TW": "英業達", "2308.TW": "台達電",
+        "5392.TW": "神盾", "3530.TW": "晶智", "6285.TW": "啟碁", "2345.TW": "智邦", "3662.TW": "富信",
+        "8046.TW": "南電", "2426.TW": "福裕", "2399.TW": "映泰", "3017.TW": "奇鋐", "6214.TW": "精新",
     },
-    "半導體": {
+    "⚙️ 半導體": {
         "2330.TW": "台積電", "2454.TW": "聯發科", "3661.TW": "世芯-KY", "3443.TW": "創意", "3035.TW": "智原",
-        "2379.TW": "瑞昱", "2408.TW": "南亞科", "2303.TW": "聯電", "3105.TWO": "穩懋",
+        "2379.TW": "瑞昱", "2408.TW": "南亞科", "2303.TW": "聯電", "3105.TWO": "穩懋", "3031.TW": "智微",
+        "5434.TW": "崇拓", "6462.TW": "聯詠", "5469.TW": "瑞昱", "3014.TW": "聯陽", "6263.TW": "普洛迪",
+        "2409.TW": "友信", "3665.TW": "為升", "6258.TW": "砰砰", "6254.TW": "馬克", "3227.TW": "電晶圖",
     },
-    "散熱": {
+    "💨 散熱": {
         "3017.TW": "奇鋐", "3324.TWO": "雙鴻", "3653.TW": "健策", "2421.TW": "建準",
+        "3535.TW": "晶磊", "6237.TW": "邦友", "2308.TW": "台達電",
     },
-    "PCB / CCL": {
+    "📱 PCB / CCL": {
         "2383.TW": "台光電", "2368.TW": "金像電", "6274.TWO": "台燿", "6213.TW": "聯茂", "8046.TW": "南電",
+        "2353.TW": "華碩", "2324.TW": "仁寶", "2393.TW": "力達", "6200.TW": "毅昌", "3231.TW": "緯創",
     },
-    "光通訊 / 網通": {
+    "🌐 光通訊 / 網通": {
         "4906.TW": "正文", "6285.TW": "啟碁", "2345.TW": "智邦", "3081.TWO": "聯亞",
+        "6415.TW": "光磊", "3044.TW": "聯光", "6451.TW": "訊光", "6462.TW": "聯詠",
     },
-    "記憶體": {
+    "💾 記憶體": {
         "2408.TW": "南亞科", "2344.TW": "華邦電", "3260.TWO": "威剛", "8299.TWO": "群聯",
+        "5289.TW": "力華", "2449.TW": "京元電", "3034.TW": "聯新",
     },
-    "金融": {
+    "💰 金融": {
         "2881.TW": "富邦金", "2882.TW": "國泰金", "2891.TW": "中信金", "2886.TW": "兆豐金",
+        "2880.TW": "華南金", "2885.TW": "元大金", "2883.TW": "開發金", "2887.TW": "台新金",
+        "1101.TW": "台泥", "1102.TW": "亞泥", "2888.TW": "新光金", "2890.TW": "永豐金",
     },
-    "航運": {
+    "⛴️ 航運": {
         "2603.TW": "長榮", "2609.TW": "陽明", "2615.TW": "萬海", "2618.TW": "長榮航",
+        "2606.TW": "裕民", "2633.TW": "台灣高鐵", "2617.TW": "華航", "2616.TW": "瑞銀",
     },
-    "生技醫療": {
+    "🧬 生技醫療": {
         "6446.TW": "藥華藥", "4743.TWO": "合一", "4123.TWO": "晟德", "6547.TWO": "高端疫苗",
+        "4190.TW": "安成藥", "1439.TW": "昶茂", "1452.TW": "瑞磐", "4182.TW": "艾茉美",
+    },
+    "⚡ 綠能": {
+        "3576.TW": "聯合再生", "3708.TW": "磊晶", "2014.TW": "鼎茂", "2015.TW": "豐興",
+        "2325.TW": "矽格", "6282.TW": "康舒", "1605.TW": "華新", "1722.TW": "台肥",
+    },
+    "🏭 鋼鐵": {
+        "2002.TW": "中鋼", "2006.TW": "臺塑", "2105.TW": "正新", "2104.TW": "國際中橡",
+        "2015.TW": "豐興", "2014.TW": "鼎茂", "1605.TW": "華新", "2009.TW": "南寶",
     },
 }
 
 # =========================
-# Sidebar
+# Sidebar - 改進版
 # =========================
-st.sidebar.header("系統狀態")
+st.sidebar.markdown("<div style='font-size: 16px; font-weight: 950; margin-bottom: 16px; color: #f8fafc;'>⚙️ 系統設定</div>", unsafe_allow_html=True)
 st.sidebar.write("Telegram：", "✅ 已設定" if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID else "❌ 未設定")
 
-st.sidebar.header("掃描設定")
-scan_mode = st.sidebar.selectbox(
-    "掃描來源",
-    ["全部主題熱力圖"] + list(THEME_POOLS.keys()) + ["全部台股"],
+st.sidebar.markdown("<div class='sidebar-divider'></div>", unsafe_allow_html=True)
+
+# 掃描來源 - 改進顯示
+st.sidebar.markdown("<div style='font-size: 15px; font-weight: 950; margin-bottom: 12px; color: #f8fafc;'>📡 掃描來源</div>", unsafe_allow_html=True)
+
+scan_options = ["🎯 全部主題熱力圖 (150+ 檔)"] + [f"{key} ({len(pool)} 檔)" for key, pool in THEME_POOLS.items()] + ["🌍 全部台股"]
+scan_mode_display = st.sidebar.selectbox(
+    "選擇掃描來源",
+    scan_options,
     index=0,
+    label_visibility="collapsed"
 )
-scan_limit = st.sidebar.slider("全部台股掃描檔數", 10, 500, 50)
-refresh_sec = st.sidebar.slider("刷新秒數", 60, 1200, 180)
+
+# 清理選項名稱用於邏輯
+if "全部主題熱力圖" in scan_mode_display:
+    scan_mode = "全部主題熱力圖"
+elif "全部台股" in scan_mode_display:
+    scan_mode = "全部台股"
+else:
+    # 從顯示文本提取原始名稱
+    scan_mode = next((key for key in THEME_POOLS.keys() if key.split()[-1][:-1] in scan_mode_display), None)
+
+st.sidebar.markdown("<div class='sidebar-divider'></div>", unsafe_allow_html=True)
+
+# 其他設定
+st.sidebar.markdown("<div style='font-size: 15px; font-weight: 950; margin-bottom: 12px; color: #f8fafc;'>📊 掃描參數</div>", unsafe_allow_html=True)
+scan_limit = st.sidebar.slider("全部台股檔數", 10, 500, 50, label_visibility="collapsed")
+refresh_sec = st.sidebar.slider("刷新秒數", 60, 1200, 180, label_visibility="collapsed")
 auto_refresh = st.sidebar.checkbox("自動刷新", value=False)
 
-st.sidebar.header("多方推播設定")
-alert_score = st.sidebar.slider("多方推播最低分數", 60, 100, 75)
-only_volume_alert = st.sidebar.checkbox("多方推播需成交量放大", value=True)
-avoid_hot_rsi = st.sidebar.checkbox("避開 RSI 過熱推播", value=True)
+st.sidebar.markdown("<div class='sidebar-divider'></div>", unsafe_allow_html=True)
 
-st.sidebar.header("空方警戒設定")
-bear_alert_score = st.sidebar.slider("空方警戒推播最低分數", 60, 100, 75)
+st.sidebar.markdown("<div style='font-size: 15px; font-weight: 950; margin-bottom: 12px; color: #f8fafc;'>🟢 多方推播</div>", unsafe_allow_html=True)
+alert_score = st.sidebar.slider("最低分數", 60, 100, 75, label_visibility="collapsed")
+only_volume_alert = st.sidebar.checkbox("需成交量放大", value=True)
+avoid_hot_rsi = st.sidebar.checkbox("避開 RSI 過熱", value=True)
 
-st.sidebar.header("盤中量能設定")
-intraday_hot_ratio = st.sidebar.slider("盤中爆量倍數", 1.2, 5.0, 2.0, 0.1)
-major_force_amount = st.sidebar.number_input("主力雷達最低成交值", value=100000000, step=10000000)
+st.sidebar.markdown("<div class='sidebar-divider'></div>", unsafe_allow_html=True)
+
+st.sidebar.markdown("<div style='font-size: 15px; font-weight: 950; margin-bottom: 12px; color: #f8fafc;'>🔴 空方警戒</div>", unsafe_allow_html=True)
+bear_alert_score = st.sidebar.slider("最低分數", 60, 100, 75, label_visibility="collapsed")
+
+st.sidebar.markdown("<div class='sidebar-divider'></div>", unsafe_allow_html=True)
+
+st.sidebar.markdown("<div style='font-size: 15px; font-weight: 950; margin-bottom: 12px; color: #f8fafc;'>💥 量能設定</div>", unsafe_allow_html=True)
+intraday_hot_ratio = st.sidebar.slider("爆量倍數", 1.2, 5.0, 2.0, 0.1, label_visibility="collapsed")
+major_force_amount = st.sidebar.number_input("最低成交值", value=100000000, step=10000000, label_visibility="collapsed")
 
 # =========================
 # 工具函式
@@ -778,10 +828,10 @@ def render_detail(selected):
 
 
 # =========================
-# 掃描主流程（簡化版 - 串行）
+# 掃描主流程
 # =========================
 stocks = get_scan_list()
-st.subheader(f"📡 掃描來源：{scan_mode}｜共 {len(stocks)} 檔")
+st.subheader(f"📡 掃描來源：{scan_mode_display}｜共 {len(stocks)} 檔")
 progress = st.progress(0)
 status_placeholder = st.empty()
 results = []
@@ -791,7 +841,7 @@ start_time = time.time()
 for i, item in enumerate(stocks):
     name = item["名稱"]
     code = item["代號"]
-    market_group = item.get("市場", scan_mode)
+    market_group = item.get("市場", scan_mode_display)
     is_theme_stock = scan_mode not in ["全部主題熱力圖", "全部台股"]
     
     try:
@@ -813,7 +863,7 @@ for i, item in enumerate(stocks):
         if should_alert(j) and bull_alert_key not in st.session_state.sent_alerts:
             buy_price_text = "不建議追價" if j["buy_price"] is None else f"{j['buy_price']:.2f}"
             send_telegram(
-                f"📱 AI交易雷達 v14.6\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
+                f"📱 AI交易雷達 v14.7\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
                 f"多方分數：{j['score']}\n建議：{j['action']}\n建議買價：{buy_price_text}\n"
                 f"短線停損：{j['short_stop']:.2f}\n波段停損：{j['swing_stop']:.2f}"
             )
@@ -821,7 +871,7 @@ for i, item in enumerate(stocks):
         
         if should_bear_alert(b) and bear_alert_key not in st.session_state.sent_alerts:
             send_telegram(
-                f"📉 空方警戒雷達 v14.6\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
+                f"📉 空方警戒雷達 v14.7\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
                 f"空方分數：{b['bear_score']}\n警戒：{b['bear_action']}\n條件：{'、'.join(b['bear_tags'])}"
             )
             st.session_state.sent_alerts.add(bear_alert_key)
