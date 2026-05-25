@@ -6,6 +6,8 @@ import pandas as pd
 import requests
 import time
 import twstock
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 try:
     import shioaji as sj
@@ -26,7 +28,7 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
     st.error("尚未設定 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID")
     st.stop()
 
-st.set_page_config(page_title="AI交易面板 Mobile v14.4", layout="wide")
+st.set_page_config(page_title="AI交易面板 Mobile v14.5", layout="wide")
 
 # =========================
 # Dark Cockpit CSS
@@ -233,8 +235,8 @@ st.markdown(
 
 st.markdown('<div class="app-shell">', unsafe_allow_html=True)
 st.markdown('<div class="top-status">● 盤中交易雷達</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-title">AI交易面板 Mobile v14.4 🚀</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">交易駕駛艙｜Shioaji 即時行情｜類股熱力圖｜主力雷達｜空方警戒</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">AI交易面板 Mobile v14.5 🚀</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">交易駕駛艙｜類股熱力圖｜主力雷達｜空方警戒｜高速掃描</div>', unsafe_allow_html=True)
 st.markdown('<div class="cockpit-line"></div>', unsafe_allow_html=True)
 
 if "sent_alerts" not in st.session_state:
@@ -284,7 +286,6 @@ THEME_POOLS = {
 # Sidebar
 # =========================
 st.sidebar.header("系統狀態")
-st.sidebar.write("Shioaji：", "✅ 已設定" if SHIOAJI_API_KEY and SHIOAJI_SECRET_KEY else "❌ 未設定")
 st.sidebar.write("Telegram：", "✅ 已設定" if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID else "❌ 未設定")
 
 st.sidebar.header("掃描設定")
@@ -310,24 +311,8 @@ st.sidebar.header("盤中量能設定")
 intraday_hot_ratio = st.sidebar.slider("盤中爆量倍數", 1.2, 5.0, 2.0, 0.1)
 major_force_amount = st.sidebar.number_input("主力雷達最低成交值", value=100000000, step=10000000)
 
-# =========================
-# Shioaji 初始化
-# =========================
-@st.cache_resource
-def init_shioaji():
-    if sj is None:
-        return None, "尚未安裝 shioaji"
-    if not SHIOAJI_API_KEY or not SHIOAJI_SECRET_KEY:
-        return None, "尚未設定 SHIOAJI_API_KEY 或 SHIOAJI_SECRET_KEY"
-    try:
-        api = sj.Shioaji(simulation=True)
-        api.login(api_key=SHIOAJI_API_KEY, secret_key=SHIOAJI_SECRET_KEY)
-        return api, "Shioaji 已登入"
-    except Exception as e:
-        return None, f"Shioaji 登入失敗：{e}"
-
-api, shioaji_status = init_shioaji()
-st.sidebar.caption(shioaji_status)
+st.sidebar.header("性能設定")
+max_workers = st.sidebar.slider("並行掃描數", 2, 16, 6)
 
 # =========================
 # 工具函式
@@ -401,64 +386,44 @@ def get_scan_list():
     return [{"名稱": f"{name} {code}", "代號": code, "市場": scan_mode} for code, name in pool.items()]
 
 
-@st.cache_data(ttl=120)
+@st.cache_data(ttl=300)
 def get_data(code):
-    data = yf.download(code, period="10mo", interval="1d", progress=False, auto_adjust=False)
-    if data.empty:
-        return None
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = data.columns.get_level_values(0)
-    data = data[["Open", "High", "Low", "Close", "Volume"]]
-    data = data.apply(pd.to_numeric, errors="coerce").dropna()
-    if len(data) < 90:
-        return None
-    data["MA5"] = data["Close"].rolling(5).mean()
-    data["MA20"] = data["Close"].rolling(20).mean()
-    data["MA60"] = data["Close"].rolling(60).mean()
-    data["VOL20"] = data["Volume"].rolling(20).mean()
-    data["HIGH20"] = data["High"].rolling(20).max()
-    data["HIGH60"] = data["High"].rolling(60).max()
-    data["LOW20"] = data["Low"].rolling(20).min()
-    data["LOW60"] = data["Low"].rolling(60).min()
-    delta = data["Close"].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = (-delta.clip(upper=0)).rolling(14).mean()
-    rs = gain / loss
-    data["RSI"] = 100 - (100 / (1 + rs))
-    ema12 = data["Close"].ewm(span=12, adjust=False).mean()
-    ema26 = data["Close"].ewm(span=26, adjust=False).mean()
-    data["MACD"] = ema12 - ema26
-    data["SIGNAL"] = data["MACD"].ewm(span=9, adjust=False).mean()
-    return data.dropna()
-
-
-def get_shioaji_snapshot(yf_code):
-    if api is None:
-        return None
-    stock_id = clean_code(yf_code)
     try:
-        contract = api.Contracts.Stocks[stock_id]
-        snapshots = api.snapshots([contract])
-        if not snapshots:
+        # 優化：改為 5 個月歷史數據，加快下載速度
+        data = yf.download(code, period="5mo", interval="1d", progress=False, auto_adjust=False, threads=False)
+        if data.empty:
             return None
-        s = snapshots[0]
-        return {
-            "即時價": getattr(s, "close", None),
-            "即時量": getattr(s, "total_volume", None) if getattr(s, "total_volume", None) is not None else getattr(s, "volume", None),
-            "即時漲跌幅%": getattr(s, "change_rate", None),
-            "成交值": getattr(s, "total_amount", None),
-        }
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+        data = data[["Open", "High", "Low", "Close", "Volume"]]
+        data = data.apply(pd.to_numeric, errors="coerce").dropna()
+        if len(data) < 60:
+            return None
+        data["MA5"] = data["Close"].rolling(5).mean()
+        data["MA20"] = data["Close"].rolling(20).mean()
+        data["MA60"] = data["Close"].rolling(60).mean()
+        data["VOL20"] = data["Volume"].rolling(20).mean()
+        data["HIGH20"] = data["High"].rolling(20).max()
+        data["HIGH60"] = data["High"].rolling(60).max()
+        data["LOW20"] = data["Low"].rolling(20).min()
+        data["LOW60"] = data["Low"].rolling(60).min()
+        delta = data["Close"].diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        rs = gain / loss
+        data["RSI"] = 100 - (100 / (1 + rs))
+        ema12 = data["Close"].ewm(span=12, adjust=False).mean()
+        ema26 = data["Close"].ewm(span=26, adjust=False).mean()
+        data["MACD"] = ema12 - ema26
+        data["SIGNAL"] = data["MACD"].ewm(span=9, adjust=False).mean()
+        return data.dropna()
     except Exception:
         return None
 
 
-def calc_intraday_volume_ratio(realtime_volume, avg_volume20):
-    if realtime_volume is None or avg_volume20 is None or avg_volume20 <= 0:
-        return 0
-    expected_volume_now = avg_volume20 * market_progress_ratio()
-    if expected_volume_now <= 0:
-        return 0
-    return realtime_volume / expected_volume_now
+def calc_intraday_volume_ratio(avg_volume20):
+    # 簡化：不依賴實時數據
+    return 1.0
 
 
 def calc_buy_price(data, score, rsi_hot, weak):
@@ -624,19 +589,15 @@ def judge_bear(data):
     return {"bear_score": bear_score, "bear_action": bear_action, "bear_reason": bear_reason, "bear_tags": bear_tags, "volume_ratio": volume_ratio}
 
 
-def judge_major_force(change_pct, bull_score, bear_score, intraday_ratio, turnover, action, bear_action):
-    if turnover is None:
-        turnover = 0
-    if intraday_ratio >= 2.5 and change_pct >= 2 and bull_score >= 70 and turnover >= major_force_amount:
+def judge_major_force(change_pct, bull_score, bear_score):
+    if change_pct >= 2 and bull_score >= 70:
         return "🟢 主力買盤疑似進場"
-    if intraday_ratio >= 2.0 and change_pct >= 1 and bull_score >= 65:
+    if change_pct >= 1 and bull_score >= 65:
         return "🟡 買盤增溫"
-    if intraday_ratio >= 2.0 and change_pct <= -2 and bear_score >= 60 and turnover >= major_force_amount:
+    if change_pct <= -2 and bear_score >= 60:
         return "🔴 主力賣壓疑似增加"
-    if "空方警戒" in bear_action and intraday_ratio >= 1.8:
+    if bear_score >= 60:
         return "🟠 賣壓偏重"
-    if intraday_ratio >= 2.0:
-        return "💥 盤中爆量"
     return "一般"
 
 
@@ -737,7 +698,7 @@ def render_heatmap(theme_summary):
                         <div class="heat-score">{item['熱度分數']}</div>
                         <div class="heat-meta">
                             {item['情緒']}<br>
-                            爆量 {item['爆量數']}｜多方 {item['多方數']}｜空方 {item['空方數']}
+                            多方 {item['多方數']}｜空方 {item['空方數']}
                         </div>
                     </div>
                     """,
@@ -758,12 +719,11 @@ def render_radar_list(title, data, mode="bull"):
         st.markdown('</div>', unsafe_allow_html=True)
         return
     for idx, (_, row) in enumerate(data.head(8).iterrows(), start=1):
-        price = row.get("即時價") if pd.notna(row.get("即時價")) else row.get("收盤")
-        change = row.get("漲跌幅%") if pd.notna(row.get("漲跌幅%")) else 0
+        price = row.get("收盤")
+        change = row.get("漲跌幅%", 0)
         score = row.get("多方分數") if mode == "bull" else row.get("空方分數")
         action = row.get("建議") if mode == "bull" else row.get("空方警戒")
         force = row.get("主力雷達", "一般")
-        intraday = row.get("盤中量比", 0)
         st.markdown(f"""
         <div class="radar-row">
             <div class="rank-badge">{idx}</div>
@@ -772,7 +732,7 @@ def render_radar_list(title, data, mode="bull"):
                 <div class="stock-code">{row.get('代號')}</div>
             </div>
             <div>
-                <div class="mini-label">即時價</div>
+                <div class="mini-label">收盤</div>
                 <div class="mini-value">{price}</div>
             </div>
             <div class="hide-mobile">
@@ -780,8 +740,8 @@ def render_radar_list(title, data, mode="bull"):
                 <div class="mini-value">{change}%</div>
             </div>
             <div class="hide-mobile">
-                <div class="mini-label">分數 / 量比</div>
-                <div class="mini-value">{score} / {intraday}</div>
+                <div class="mini-label">分數</div>
+                <div class="mini-value">{score}</div>
             </div>
             <div>
                 <span class="{pill_class(action)}">{action}</span><br>
@@ -793,7 +753,7 @@ def render_radar_list(title, data, mode="bull"):
 
 
 def render_detail(selected):
-    price = selected["即時價"] if pd.notna(selected["即時價"]) else selected["收盤"]
+    price = selected["收盤"]
     change_class = "detail-change-pos" if selected["漲跌幅%"] >= 0 else "detail-change-neg"
     buy_price = selected["建議買價"] if pd.notna(selected["建議買價"]) else "不建議追價"
     st.markdown(f"""
@@ -816,7 +776,6 @@ def render_detail(selected):
         <div class="detail-grid">
             <div class="detail-cell"><div class="detail-cell-label">多方分數</div><div class="detail-cell-value">{selected['多方分數']}</div></div>
             <div class="detail-cell"><div class="detail-cell-label">空方分數</div><div class="detail-cell-value">{selected['空方分數']}</div></div>
-            <div class="detail-cell"><div class="detail-cell-label">盤中量比</div><div class="detail-cell-value">{selected['盤中量比']}</div></div>
             <div class="detail-cell"><div class="detail-cell-label">RSI</div><div class="detail-cell-value">{selected['RSI']}</div></div>
             <div class="detail-cell"><div class="detail-cell-label">建議買價</div><div class="detail-cell-value">{buy_price}</div></div>
             <div class="detail-cell"><div class="detail-cell-label">短線停損</div><div class="detail-cell-value">{selected['短線停損']}</div></div>
@@ -830,76 +789,90 @@ def render_detail(selected):
     </div>
     """, unsafe_allow_html=True)
 
-# =========================
-# 掃描主流程
-# =========================
-stocks = get_scan_list()
-st.subheader(f"📡 掃描來源：{scan_mode}｜共 {len(stocks)} 檔")
-progress = st.progress(0)
-results = []
 
-for i, item in enumerate(stocks):
+# =========================
+# 並行掃描函式
+# =========================
+def scan_single_stock(item):
     name = item["名稱"]
     code = item["代號"]
     market_group = item.get("市場", scan_mode)
     is_theme_stock = scan_mode not in ["全部主題熱力圖", "全部台股"]
+    
     try:
         d = get_data(code)
         if d is None:
-            continue
-        snap = get_shioaji_snapshot(code)
+            return None
+        
         j = judge(d, is_theme_stock=is_theme_stock)
         b = judge_bear(d)
         l = d.iloc[-1]
         p = d.iloc[-2]
         daily_change_pct = ((l["Close"] - p["Close"]) / p["Close"]) * 100
-        realtime_price = realtime_volume = realtime_change_pct = turnover = None
-        if snap:
-            realtime_price = snap.get("即時價")
-            realtime_volume = snap.get("即時量")
-            realtime_change_pct = snap.get("即時漲跌幅%")
-            turnover = snap.get("成交值")
-        display_price = realtime_price if realtime_price else l["Close"]
-        display_change = realtime_change_pct if realtime_change_pct is not None else daily_change_pct
-        intraday_ratio = calc_intraday_volume_ratio(realtime_volume, l["VOL20"])
-        major_force = judge_major_force(display_change, j["score"], b["bear_score"], intraday_ratio, turnover, j["action"], b["bear_action"])
+        
+        major_force = judge_major_force(daily_change_pct, j["score"], b["bear_score"])
+        
         bull_alert_key = f"{datetime.now(TW_TZ).date()}-BULL-{code}-{j['action']}-{j['score']}"
         bear_alert_key = f"{datetime.now(TW_TZ).date()}-BEAR-{code}-{b['bear_action']}-{b['bear_score']}"
+        
         if should_alert(j) and bull_alert_key not in st.session_state.sent_alerts:
             buy_price_text = "不建議追價" if j["buy_price"] is None else f"{j['buy_price']:.2f}"
             send_telegram(
-                f"📱 AI交易雷達 v14.4\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
-                f"盤中量比：{intraday_ratio:.2f}\n主力雷達：{major_force}\n多方分數：{j['score']}\n建議：{j['action']}\n"
-                f"建議買價：{buy_price_text}\n短線停損：{j['short_stop']:.2f}\n波段停損：{j['swing_stop']:.2f}"
+                f"📱 AI交易雷達 v14.5\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
+                f"多方分數：{j['score']}\n建議：{j['action']}\n建議買價：{buy_price_text}\n"
+                f"短線停損：{j['short_stop']:.2f}\n波段停損：{j['swing_stop']:.2f}"
             )
             st.session_state.sent_alerts.add(bull_alert_key)
+        
         if should_bear_alert(b) and bear_alert_key not in st.session_state.sent_alerts:
             send_telegram(
-                f"📉 空方警戒雷達 v14.4\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
-                f"盤中量比：{intraday_ratio:.2f}\n主力雷達：{major_force}\n空方分數：{b['bear_score']}\n警戒：{b['bear_action']}\n"
-                f"條件：{'、'.join(b['bear_tags'])}"
+                f"📉 空方警戒雷達 v14.5\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
+                f"空方分數：{b['bear_score']}\n警戒：{b['bear_action']}\n條件：{'、'.join(b['bear_tags'])}"
             )
             st.session_state.sent_alerts.add(bear_alert_key)
-        results.append({
+        
+        return {
             "類股": market_group, "名稱": name, "代號": code,
-            "即時價": None if realtime_price is None else round(realtime_price, 2),
-            "收盤": round(l["Close"], 2), "漲跌幅%": round(display_change, 2),
-            "即時量": realtime_volume, "成交值": turnover, "盤中量比": round(intraday_ratio, 2),
+            "收盤": round(l["Close"], 2), "漲跌幅%": round(daily_change_pct, 2),
             "主力雷達": major_force, "RSI": round(l["RSI"], 2), "多方分數": j["score"], "空方分數": b["bear_score"],
             "分類": "、".join(j["tags"]), "空方條件": "、".join(b["bear_tags"]), "建議": j["action"], "空方警戒": b["bear_action"],
             "原因": j["reason"], "空方原因": b["bear_reason"], "建議買價": None if j["buy_price"] is None else round(j["buy_price"], 2),
             "短線停損": round(j["short_stop"], 2), "波段停損": round(j["swing_stop"], 2), "防守線": round(j["defense_line"], 2),
-            "量比": round(b["volume_ratio"], 2),
-        })
+        }
     except Exception as e:
-        results.append({
-            "類股": market_group, "名稱": name, "代號": code, "即時價": None, "收盤": None, "漲跌幅%": None,
-            "即時量": None, "成交值": None, "盤中量比": 0, "主力雷達": "-", "RSI": None,
-            "多方分數": 0, "空方分數": 0, "分類": "-", "空方條件": "-", "建議": "讀取失敗",
-            "空方警戒": "-", "原因": str(e), "空方原因": "-", "建議買價": None, "短線停損": None,
-            "波段停損": None, "防守線": None, "量比": None,
-        })
-    progress.progress((i + 1) / len(stocks))
+        return {
+            "類股": market_group, "名稱": name, "代號": code, "收盤": None, "漲跌幅%": None,
+            "主力雷達": "-", "RSI": None, "多方分數": 0, "空方分數": 0, "分類": "-", "空方條件": "-",
+            "建議": "讀取失敗", "空方警戒": "-", "原因": str(e), "空方原因": "-", "建議買價": None,
+            "短線停損": None, "波段停損": None, "防守線": None,
+        }
+
+
+# =========================
+# 掃描主流程（並行）
+# =========================
+stocks = get_scan_list()
+st.subheader(f"📡 掃描來源：{scan_mode}｜共 {len(stocks)} 檔｜並行數：{max_workers}")
+progress = st.progress(0)
+status_placeholder = st.empty()
+results = []
+
+start_time = time.time()
+
+with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    futures = [executor.submit(scan_single_stock, item) for item in stocks]
+    
+    completed = 0
+    for future in as_completed(futures):
+        result = future.result()
+        if result is not None:
+            results.append(result)
+        completed += 1
+        progress.progress(completed / len(stocks))
+        status_placeholder.text(f"掃描進度：{completed}/{len(stocks)} ⚡")
+
+elapsed_time = time.time() - start_time
+status_placeholder.text(f"✅ 掃描完成！耗時 {elapsed_time:.1f} 秒")
 
 # =========================
 # 呈現
@@ -909,18 +882,18 @@ if df.empty:
     st.error("沒有掃描到有效資料")
     st.stop()
 
-df = df.sort_values(by=["多方分數", "盤中量比", "漲跌幅%"], ascending=False).reset_index(drop=True)
+df = df.sort_values(by=["多方分數", "漲跌幅%"], ascending=False).reset_index(drop=True)
 sentiment_label, sentiment_score = market_sentiment(df)
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
     render_metric("市場情緒", sentiment_label, f"分數 {sentiment_score}")
 with c2:
-    render_metric("盤中爆量", int((df["盤中量比"] >= intraday_hot_ratio).sum()), f"門檻 {intraday_hot_ratio} 倍")
-with c3:
     render_metric("多方強勢", int((df["多方分數"] >= 65).sum()), "多方分數 ≥ 65")
-with c4:
+with c3:
     render_metric("空方警戒", int((df["空方分數"] >= 60).sum()), "空方分數 ≥ 60")
+with c4:
+    render_metric("掃描速度", f"{elapsed_time:.1f}s", f"{len(stocks)/elapsed_time:.1f} 檔/秒")
 
 # 多類股熱力圖
 theme_summary = []
@@ -932,8 +905,7 @@ for group_name, pool in THEME_POOLS.items():
     avg_change = group_df["漲跌幅%"].fillna(0).mean()
     bull_count = int((group_df["多方分數"] >= 65).sum())
     bear_count = int((group_df["空方分數"] >= 60).sum())
-    hot_count = int((group_df["盤中量比"] >= intraday_hot_ratio).sum())
-    heat_score = int(max(min(avg_change * 5 + bull_count * 15 + hot_count * 12 - bear_count * 12 + 45, 100), 0))
+    heat_score = int(max(min(avg_change * 5 + bull_count * 15 - bear_count * 12 + 45, 100), 0))
     if heat_score >= 75:
         mood = "🟢 多頭強勢"
     elif heat_score >= 60:
@@ -944,14 +916,14 @@ for group_name, pool in THEME_POOLS.items():
         mood = "🟠 偏空"
     else:
         mood = "🔴 空方壓力"
-    theme_summary.append({"類股": group_name, "熱度分數": heat_score, "情緒": mood, "爆量數": hot_count, "多方數": bull_count, "空方數": bear_count})
+    theme_summary.append({"類股": group_name, "熱度分數": heat_score, "情緒": mood, "多方數": bull_count, "空方數": bear_count})
 
 theme_summary = sorted(theme_summary, key=lambda x: x["熱度分數"], reverse=True)
 render_heatmap(theme_summary)
 
 # 雷達列表
-render_radar_list("🚀 今日多方 Top 8", df.sort_values(by=["多方分數", "盤中量比"], ascending=False), mode="bull")
-render_radar_list("📉 空方警戒 Top 8", df.sort_values(by=["空方分數", "盤中量比"], ascending=False), mode="bear")
+render_radar_list("🚀 今日多方 Top 8", df.sort_values(by=["多方分數"], ascending=False), mode="bull")
+render_radar_list("📉 空方警戒 Top 8", df.sort_values(by=["空方分數"], ascending=False), mode="bear")
 
 # 單檔詳細資料
 st.markdown('<div class="section-title">🔎 單檔詳細資訊</div>', unsafe_allow_html=True)
@@ -959,40 +931,37 @@ selected_code = st.selectbox("選擇股票查看詳細資料", df["代號"].toli
 selected = df[df["代號"] == selected_code].iloc[0]
 render_detail(selected)
 
-# 完整表格 Tabs - 修正版本
+# 完整表格 Tabs
 strong_df = df[df["分類"].str.contains("今日強勢", na=False)]
-volume_df = df[df["盤中量比"] >= intraday_hot_ratio].sort_values(by="盤中量比", ascending=False)
-major_df = df[df["主力雷達"].str.contains("主力|買盤|賣壓|爆量", na=False)]
+major_df = df[df["主力雷達"].str.contains("主力|買盤|賣壓", na=False)]
 macd_df = df[df["分類"].str.contains("MACD翻正", na=False)]
 high_df = df[df["分類"].str.contains("創波段高", na=False)]
 buy_df = df[df["建議"].str.contains("強買點|可觀察買點", na=False)]
 risk_df = df[df["建議"].str.contains("減碼|出場", na=False)]
 bear_df = df[df["空方警戒"].str.contains("空方警戒|高度空方警戒|轉弱觀察", na=False)].sort_values(by="空方分數", ascending=False)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(
-    ["🔥 今日強勢", "💥 盤中爆量", "🧲 主力雷達", "🟢 MACD翻正", "🚀 創波段高", "🟡 買點", "🔴 風險", "📉 空方警戒", "📊 完整"]
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
+    ["🔥 今日強勢", "🧲 主力雷達", "🟢 MACD翻正", "🚀 創波段高", "🟡 買點", "🔴 風險", "📉 空方警戒", "📊 完整"]
 )
 
 with tab1:
     st.dataframe(strong_df, use_container_width=True)
 with tab2:
-    st.dataframe(volume_df, use_container_width=True)
-with tab3:
     st.dataframe(major_df, use_container_width=True)
-with tab4:
+with tab3:
     st.dataframe(macd_df, use_container_width=True)
-with tab5:
+with tab4:
     st.dataframe(high_df, use_container_width=True)
-with tab6:
+with tab5:
     st.dataframe(buy_df, use_container_width=True)
-with tab7:
+with tab6:
     st.dataframe(risk_df, use_container_width=True)
-with tab8:
+with tab7:
     st.dataframe(bear_df, use_container_width=True)
-with tab9:
+with tab8:
     st.dataframe(df, use_container_width=True)
 
-st.caption(f"最後更新：{datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')}｜台灣時間｜Shioaji 即時行情")
+st.caption(f"最後更新：{datetime.now(TW_TZ).strftime('%Y-%m-%d %H:%M:%S')}｜台灣時間｜掃描耗時：{elapsed_time:.1f} 秒")
 st.markdown('</div>', unsafe_allow_html=True)
 
 if auto_refresh:
