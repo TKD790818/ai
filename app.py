@@ -26,7 +26,7 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
     st.error("尚未設定 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID")
     st.stop()
 
-st.set_page_config(page_title="AI交易面板 Mobile v14.3", layout="wide")
+st.set_page_config(page_title="AI交易面板 Mobile v14.4", layout="wide")
 
 # =========================
 # Dark Cockpit CSS
@@ -110,12 +110,6 @@ st.markdown(
         color: #f8fafc;
     }
     .section-sub { color: #8aa4c7; font-size: 13px; margin-bottom: 10px; }
-    .heat-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-        gap: 12px;
-        margin-bottom: 18px;
-    }
     .heat-box {
         position: relative;
         overflow: hidden;
@@ -239,7 +233,7 @@ st.markdown(
 
 st.markdown('<div class="app-shell">', unsafe_allow_html=True)
 st.markdown('<div class="top-status">● 盤中交易雷達</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-title">AI交易面板 Mobile v14.3 🚀</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">AI交易面板 Mobile v14.4 🚀</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">交易駕駛艙｜Shioaji 即時行情｜類股熱力圖｜主力雷達｜空方警戒</div>', unsafe_allow_html=True)
 st.markdown('<div class="cockpit-line"></div>', unsafe_allow_html=True)
 
@@ -728,7 +722,6 @@ def render_heatmap(theme_summary):
         st.info("目前沒有類股熱力資料")
         return
 
-    # 用 Streamlit columns 取代整串 HTML grid，避免 HTML 被當文字顯示導致跑版
     cols_per_row = 4
     for start in range(0, len(theme_summary), cols_per_row):
         row_items = theme_summary[start:start + cols_per_row]
@@ -751,7 +744,6 @@ def render_heatmap(theme_summary):
                     unsafe_allow_html=True,
                 )
 
-        # 補空欄，避免最後一排數量不足時變形
         if len(row_items) < cols_per_row:
             for col in cols[len(row_items):]:
                 with col:
@@ -876,14 +868,14 @@ for i, item in enumerate(stocks):
         if should_alert(j) and bull_alert_key not in st.session_state.sent_alerts:
             buy_price_text = "不建議追價" if j["buy_price"] is None else f"{j['buy_price']:.2f}"
             send_telegram(
-                f"📱 AI交易雷達 v14.3\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
+                f"📱 AI交易雷達 v14.4\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
                 f"盤中量比：{intraday_ratio:.2f}\n主力雷達：{major_force}\n多方分數：{j['score']}\n建議：{j['action']}\n"
                 f"建議買價：{buy_price_text}\n短線停損：{j['short_stop']:.2f}\n波段停損：{j['swing_stop']:.2f}"
             )
             st.session_state.sent_alerts.add(bull_alert_key)
         if should_bear_alert(b) and bear_alert_key not in st.session_state.sent_alerts:
             send_telegram(
-                f"📉 空方警戒雷達 v14.3\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
+                f"📉 空方警戒雷達 v14.4\n股票：{name}\n代號：{code}\n即時價：{display_price:.2f}\n漲跌幅：{display_change:.2f}%\n"
                 f"盤中量比：{intraday_ratio:.2f}\n主力雷達：{major_force}\n空方分數：{b['bear_score']}\n警戒：{b['bear_action']}\n"
                 f"條件：{'、'.join(b['bear_tags'])}"
             )
@@ -967,7 +959,7 @@ selected_code = st.selectbox("選擇股票查看詳細資料", df["代號"].toli
 selected = df[df["代號"] == selected_code].iloc[0]
 render_detail(selected)
 
-# 完整表格 Tabs
+# 完整表格 Tabs - 修正版本
 strong_df = df[df["分類"].str.contains("今日強勢", na=False)]
 volume_df = df[df["盤中量比"] >= intraday_hot_ratio].sort_values(by="盤中量比", ascending=False)
 major_df = df[df["主力雷達"].str.contains("主力|買盤|賣壓|爆量", na=False)]
@@ -977,7 +969,10 @@ buy_df = df[df["建議"].str.contains("強買點|可觀察買點", na=False)]
 risk_df = df[df["建議"].str.contains("減碼|出場", na=False)]
 bear_df = df[df["空方警戒"].str.contains("空方警戒|高度空方警戒|轉弱觀察", na=False)].sort_values(by="空方分數", ascending=False)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["🔥 今日強勢", "💥 盤中爆量", "🧲 主力雷達", "🟢 MACD翻正", "🚀 創波段高", "🟡 買點", "🔴 風險", "📉 空方警戒", "📋 全部"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(
+    ["🔥 今日強勢", "💥 盤中爆量", "🧲 主力雷達", "🟢 MACD翻正", "🚀 創波段高", "🟡 買點", "🔴 風險", "📉 空方警戒", "📊 完整"]
+)
+
 with tab1:
     st.dataframe(strong_df, use_container_width=True)
 with tab2:
@@ -1003,4 +998,3 @@ st.markdown('</div>', unsafe_allow_html=True)
 if auto_refresh:
     time.sleep(refresh_sec)
     st.rerun()
-
