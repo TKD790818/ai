@@ -6,8 +6,6 @@ import pandas as pd
 import requests
 import time
 import twstock
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import threading
 
 try:
     import shioaji as sj
@@ -28,7 +26,7 @@ if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
     st.error("尚未設定 TELEGRAM_TOKEN 或 TELEGRAM_CHAT_ID")
     st.stop()
 
-st.set_page_config(page_title="AI交易面板 Mobile v14.5", layout="wide")
+st.set_page_config(page_title="AI交易面板 Mobile v14.6", layout="wide")
 
 # =========================
 # Dark Cockpit CSS
@@ -235,8 +233,8 @@ st.markdown(
 
 st.markdown('<div class="app-shell">', unsafe_allow_html=True)
 st.markdown('<div class="top-status">● 盤中交易雷達</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-title">AI交易面板 Mobile v14.5 🚀</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-title">交易駕駛艙｜類股熱力圖｜主力雷達｜空方警戒｜高速掃描</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">AI交易面板 Mobile v14.6 🚀</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">交易駕駛艙｜快速掃描｜類股熱力圖｜主力雷達｜空方警戒</div>', unsafe_allow_html=True)
 st.markdown('<div class="cockpit-line"></div>', unsafe_allow_html=True)
 
 if "sent_alerts" not in st.session_state:
@@ -305,14 +303,10 @@ avoid_hot_rsi = st.sidebar.checkbox("避開 RSI 過熱推播", value=True)
 
 st.sidebar.header("空方警戒設定")
 bear_alert_score = st.sidebar.slider("空方警戒推播最低分數", 60, 100, 75)
-enable_bear_alert = st.sidebar.checkbox("啟用空方警戒推播", value=True)
 
 st.sidebar.header("盤中量能設定")
 intraday_hot_ratio = st.sidebar.slider("盤中爆量倍數", 1.2, 5.0, 2.0, 0.1)
 major_force_amount = st.sidebar.number_input("主力雷達最低成交值", value=100000000, step=10000000)
-
-st.sidebar.header("性能設定")
-max_workers = st.sidebar.slider("並行掃描數", 2, 16, 6)
 
 # =========================
 # 工具函式
@@ -389,8 +383,7 @@ def get_scan_list():
 @st.cache_data(ttl=300)
 def get_data(code):
     try:
-        # 優化：改為 5 個月歷史數據，加快下載速度
-        data = yf.download(code, period="5mo", interval="1d", progress=False, auto_adjust=False, threads=False)
+        data = yf.download(code, period="5mo", interval="1d", progress=False, auto_adjust=False)
         if data.empty:
             return None
         if isinstance(data.columns, pd.MultiIndex):
@@ -419,11 +412,6 @@ def get_data(code):
         return data.dropna()
     except Exception:
         return None
-
-
-def calc_intraday_volume_ratio(avg_volume20):
-    # 簡化：不依賴實時數據
-    return 1.0
 
 
 def calc_buy_price(data, score, rsi_hot, weak):
@@ -627,8 +615,7 @@ def market_sentiment(df):
     avg_change = df["漲跌幅%"].fillna(0).mean()
     bull_count = (df["多方分數"] >= 65).sum()
     bear_count = (df["空方分數"] >= 60).sum()
-    hot_count = (df["盤中量比"] >= intraday_hot_ratio).sum()
-    score = avg_change * 5 + bull_count * 8 + hot_count * 5 - bear_count * 10
+    score = avg_change * 5 + bull_count * 8 - bear_count * 10
     if score >= 60:
         label = "🟢 多頭強勢"
     elif score >= 30:
@@ -791,9 +778,17 @@ def render_detail(selected):
 
 
 # =========================
-# 並行掃描函式
+# 掃描主流程（簡化版 - 串行）
 # =========================
-def scan_single_stock(item):
+stocks = get_scan_list()
+st.subheader(f"📡 掃描來源：{scan_mode}｜共 {len(stocks)} 檔")
+progress = st.progress(0)
+status_placeholder = st.empty()
+results = []
+
+start_time = time.time()
+
+for i, item in enumerate(stocks):
     name = item["名稱"]
     code = item["代號"]
     market_group = item.get("市場", scan_mode)
@@ -802,7 +797,7 @@ def scan_single_stock(item):
     try:
         d = get_data(code)
         if d is None:
-            return None
+            continue
         
         j = judge(d, is_theme_stock=is_theme_stock)
         b = judge_bear(d)
@@ -818,7 +813,7 @@ def scan_single_stock(item):
         if should_alert(j) and bull_alert_key not in st.session_state.sent_alerts:
             buy_price_text = "不建議追價" if j["buy_price"] is None else f"{j['buy_price']:.2f}"
             send_telegram(
-                f"📱 AI交易雷達 v14.5\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
+                f"📱 AI交易雷達 v14.6\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
                 f"多方分數：{j['score']}\n建議：{j['action']}\n建議買價：{buy_price_text}\n"
                 f"短線停損：{j['short_stop']:.2f}\n波段停損：{j['swing_stop']:.2f}"
             )
@@ -826,50 +821,30 @@ def scan_single_stock(item):
         
         if should_bear_alert(b) and bear_alert_key not in st.session_state.sent_alerts:
             send_telegram(
-                f"📉 空方警戒雷達 v14.5\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
+                f"📉 空方警戒雷達 v14.6\n股票：{name}\n代號：{code}\n收盤價：{l['Close']:.2f}\n漲跌幅：{daily_change_pct:.2f}%\n"
                 f"空方分數：{b['bear_score']}\n警戒：{b['bear_action']}\n條件：{'、'.join(b['bear_tags'])}"
             )
             st.session_state.sent_alerts.add(bear_alert_key)
         
-        return {
+        results.append({
             "類股": market_group, "名稱": name, "代號": code,
             "收盤": round(l["Close"], 2), "漲跌幅%": round(daily_change_pct, 2),
             "主力雷達": major_force, "RSI": round(l["RSI"], 2), "多方分數": j["score"], "空方分數": b["bear_score"],
             "分類": "、".join(j["tags"]), "空方條件": "、".join(b["bear_tags"]), "建議": j["action"], "空方警戒": b["bear_action"],
             "原因": j["reason"], "空方原因": b["bear_reason"], "建議買價": None if j["buy_price"] is None else round(j["buy_price"], 2),
             "短線停損": round(j["short_stop"], 2), "波段停損": round(j["swing_stop"], 2), "防守線": round(j["defense_line"], 2),
-        }
+        })
     except Exception as e:
-        return {
+        results.append({
             "類股": market_group, "名稱": name, "代號": code, "收盤": None, "漲跌幅%": None,
             "主力雷達": "-", "RSI": None, "多方分數": 0, "空方分數": 0, "分類": "-", "空方條件": "-",
-            "建議": "讀取失敗", "空方警戒": "-", "原因": str(e), "空方原因": "-", "建議買價": None,
+            "建議": "讀取失敗", "空方警戒": "-", "原因": str(e)[:50], "空方原因": "-", "建議買價": None,
             "短線停損": None, "波段停損": None, "防守線": None,
-        }
-
-
-# =========================
-# 掃描主流程（並行）
-# =========================
-stocks = get_scan_list()
-st.subheader(f"📡 掃描來源：{scan_mode}｜共 {len(stocks)} 檔｜並行數：{max_workers}")
-progress = st.progress(0)
-status_placeholder = st.empty()
-results = []
-
-start_time = time.time()
-
-with ThreadPoolExecutor(max_workers=max_workers) as executor:
-    futures = [executor.submit(scan_single_stock, item) for item in stocks]
+        })
     
-    completed = 0
-    for future in as_completed(futures):
-        result = future.result()
-        if result is not None:
-            results.append(result)
-        completed += 1
-        progress.progress(completed / len(stocks))
-        status_placeholder.text(f"掃描進度：{completed}/{len(stocks)} ⚡")
+    progress.progress((i + 1) / len(stocks))
+    elapsed = time.time() - start_time
+    status_placeholder.text(f"掃描進度：{i+1}/{len(stocks)} ({elapsed:.1f}s)")
 
 elapsed_time = time.time() - start_time
 status_placeholder.text(f"✅ 掃描完成！耗時 {elapsed_time:.1f} 秒")
@@ -893,7 +868,7 @@ with c2:
 with c3:
     render_metric("空方警戒", int((df["空方分數"] >= 60).sum()), "空方分數 ≥ 60")
 with c4:
-    render_metric("掃描速度", f"{elapsed_time:.1f}s", f"{len(stocks)/elapsed_time:.1f} 檔/秒")
+    render_metric("掃描耗時", f"{elapsed_time:.1f}s", f"{len(stocks)/elapsed_time:.1f} 檔/秒")
 
 # 多類股熱力圖
 theme_summary = []
